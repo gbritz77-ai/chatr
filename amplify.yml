@@ -3,9 +3,10 @@ frontend:
   phases:
     preBuild:
       commands:
-        # Ensure we are in the correct directory (frontend)
         - cd frontend
-        - npm install
+        - npm install --legacy-peer-deps
+        # fix vite permission issue
+        - chmod +x node_modules/.bin/vite
     build:
       commands:
         - npm run build
