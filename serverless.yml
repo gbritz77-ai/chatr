@@ -1,0 +1,202 @@
+service: chatr-service
+frameworkVersion: '3'
+
+plugins:
+  - serverless-dotenv-plugin
+  - serverless-offline
+
+custom:
+  dotenv:
+    path: .env
+    logging: true
+  serverless-offline:
+    httpPort: 3000
+    lambdaPort: 3002
+    reloadHandler: true
+    ignoreJWTSignature: true
+    corsAllowOrigin: "*"
+    noPrependStageInUrl: false   # ✅ keeps /dev prefix visible in URLs
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: eu-west-2
+  stage: dev
+
+  environment:
+    JWT_SECRET: ${env:JWT_SECRET}
+    VITE_API_BASE: ${env:VITE_API_BASE}
+    MEMBERS_TABLE: chatr-members
+    MESSAGES_TABLE: chatr-messages
+    GROUPS_TABLE: chatr-groups
+    READ_TRACKING_TABLE: chatr-read-tracking
+    ATTACHMENTS_BUCKET: outsec-chat-bucket
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+
+  iamRoleStatements:
+    # ✅ DynamoDB access
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+        - dynamodb:GetItem
+        - dynamodb:UpdateItem
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:DeleteItem
+      Resource:
+        - arn:aws:dynamodb:eu-west-2:*:table/chatr-members
+        - arn:aws:dynamodb:eu-west-2:*:table/chatr-messages
+        - arn:aws:dynamodb:eu-west-2:*:table/chatr-groups
+        - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
+
+    # ✅ S3 access
+    - Effect: Allow
+      Action:
+        - s3:PutObject
+        - s3:GetObject
+        - s3:DeleteObject
+      Resource:
+        - arn:aws:s3:::outsec-chat-bucket/*
+        - arn:aws:s3:::outsec-chat-bucket
+
+    # ✅ CloudWatch logging
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource:
+        - arn:aws:logs:eu-west-2:*:log-group:*
+
+# ============================================================
+#                     FUNCTION DEFINITIONS
+# ============================================================
+functions:
+  # --- Auth ---
+  auth:
+    handler: src/handlers/auth.handler
+    events:
+      - http:
+          path: auth
+          method: post
+          cors: true
+
+  # --- Members ---
+  members:
+    handler: src/handlers/members.handler
+    events:
+      - http:
+          path: members
+          method: any
+          cors: true
+
+  # --- Messages (with subroutes) ---
+  messages:
+    handler: src/handlers/messages.handler
+    events:
+      - http:
+          path: messages
+          method: any
+          cors: true
+      - http:
+          path: messages/{proxy+}   # ✅ allows /messages/mark-read and /messages/unread-counts
+          method: any
+          cors: true
+
+  # --- Files ---
+  files:
+    handler: src/handlers/files.handler
+    events:
+      - http:
+          path: files
+          method: any
+          cors: true
+
+  # --- Groups ---
+  groups:
+    handler: src/handlers/groups.handler
+    events:
+      - http:
+          path: groups
+          method: any
+          cors: true
+
+  # --- Register ---
+  register:
+    handler: src/handlers/register.handler
+    events:
+      - http:
+          path: auth/register
+          method: post
+          cors: true
+
+  # --- Attachments (Download) ---
+  getAttachment:
+    handler: src/handlers/getAttachment.handler
+    events:
+      - http:
+          path: attachments
+          method: get
+          cors: true
+          request:
+            parameters:
+              querystrings:
+                key: true
+
+# ============================================================
+#                      RESOURCE DEFINITIONS
+# ============================================================
+resources:
+  Resources:
+    ChatMembersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: chatr-members
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: userid
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userid
+            KeyType: HASH
+
+    ChatMessagesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: chatr-messages
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: messageid
+            AttributeType: S
+        KeySchema:
+          - AttributeName: messageid
+            KeyType: HASH
+
+    ChatGroupsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: chatr-groups
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: groupid
+            AttributeType: S
+        KeySchema:
+          - AttributeName: groupid
+            KeyType: HASH
+
+    # ✅ NEW TABLE: Read tracking for unread messages
+    ChatReadTrackingTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: chatr-read-tracking
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: chatid
+            AttributeType: S
+          - AttributeName: username
+            AttributeType: S
+        KeySchema:
+          - AttributeName: chatid
+            KeyType: HASH
+          - AttributeName: username
+            KeyType: RANGE
