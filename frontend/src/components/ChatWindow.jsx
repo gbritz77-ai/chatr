@@ -3,10 +3,10 @@ import { postJSON, getJSON } from "../lib/api";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
 import { Avatar } from "../components/Avatar";
-import { Send, Smile, Paperclip, Loader2, Image as ImageIcon } from "lucide-react";
+import { Send, Smile, Paperclip, Loader2 } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow (Presigned Upload + Progress + Thumbnails)
+   💬 ChatWindow — Presigned Upload + Progress + Thumbnails
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -24,8 +24,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const messagesEndRef = useRef(null);
   const typingTimer = useRef(null);
 
-  const currentProfileName =
-    localStorage.getItem("profileName") || currentUser;
+  const currentProfileName = localStorage.getItem("profileName") || currentUser;
 
   /* ----------------------------------------------------
      LOAD MESSAGES
@@ -69,11 +68,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
           ? activeUser.id
           : `CHAT#${[activeUser.username, currentUser].sort().join("#")}`;
 
-      await postJSON("/messages/mark-read", {
-        chatId,
-        username: currentUser,
-      });
-
+      await postJSON("/messages/mark-read", { chatId, username: currentUser });
       setLastReadTimestamp(new Date().toISOString());
     } catch (err) {
       console.error("❌ Failed to mark chat as read:", err);
@@ -134,19 +129,21 @@ export default function ChatWindow({ activeUser, currentUser }) {
       setUploading(true);
       setUploadProgress(0);
 
-      // Step 1: Request presigned URL
-      const res = await fetch(`${import.meta.env.VITE_API_BASE}/files`, {
+      // Step 1: Request a presigned URL from the backend
+      const res = await fetch(`${import.meta.env.VITE_API_BASE}/files/presign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: file.name, type: file.type }),
       });
       const data = await res.json();
-      if (!data.success) throw new Error(data.message || "Failed to get upload URL");
+      if (!data.success) throw new Error(data.message || "Failed to get presigned URL");
 
-      // Step 2: Upload via XHR (progress tracking)
+      const { uploadURL, fileKey, publicUrl } = data;
+
+      // Step 2: Upload directly to S3 with progress
       await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open("PUT", data.uploadURL, true);
+        xhr.open("PUT", uploadURL, true);
         xhr.setRequestHeader("Content-Type", file.type);
 
         xhr.upload.onprogress = (e) => {
@@ -156,16 +153,13 @@ export default function ChatWindow({ activeUser, currentUser }) {
           }
         };
 
-        xhr.onload = () => {
-          if (xhr.status === 200) resolve();
-          else reject(new Error("Upload failed"));
-        };
+        xhr.onload = () => (xhr.status === 200 ? resolve() : reject(new Error("Upload failed")));
         xhr.onerror = () => reject(new Error("Network error"));
         xhr.send(file);
       });
 
-      console.log("✅ Uploaded to S3:", data.publicUrl);
-      return { success: true, url: data.publicUrl, key: data.fileKey, type: file.type };
+      console.log("✅ Uploaded to S3:", publicUrl);
+      return { success: true, url: publicUrl, key: fileKey, type: file.type };
     } catch (err) {
       console.error("❌ Upload failed:", err);
       return { success: false, message: err.message };
@@ -281,9 +275,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
           }`}
         >
           {!isMine && (
-            <div className="text-xs font-semibold text-slate-500 mb-1">
-              {senderName}
-            </div>
+            <div className="text-xs font-semibold text-slate-500 mb-1">{senderName}</div>
           )}
           {msg.text && (
             <div className="whitespace-pre-wrap break-words">{msg.text}</div>
@@ -347,9 +339,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
             <div>
               <div>{activeUser.name || activeUser.username}</div>
               {remoteTyping && (
-                <div className="text-xs text-slate-500 animate-pulse">
-                  typing...
-                </div>
+                <div className="text-xs text-slate-500 animate-pulse">typing...</div>
               )}
             </div>
           </>
@@ -364,9 +354,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
           messages.length ? (
             renderMessages()
           ) : (
-            <p className="text-center text-slate-400 italic">
-              No messages yet
-            </p>
+            <p className="text-center text-slate-400 italic">No messages yet</p>
           )
         ) : (
           <p className="text-center text-slate-400 italic mt-10">

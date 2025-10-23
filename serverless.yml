@@ -23,7 +23,6 @@ provider:
   region: eu-west-2
   stage: dev
 
-  # ✅ Environment variables for all Lambdas
   environment:
     JWT_SECRET: SuperSecretKey123!
     VITE_API_BASE: https://byu72oz79h.execute-api.eu-west-2.amazonaws.com/dev
@@ -38,7 +37,7 @@ provider:
   iam:
     role:
       statements:
-        # ✅ DynamoDB access
+        # ✅ DynamoDB permissions
         - Effect: Allow
           Action:
             - dynamodb:Scan
@@ -54,7 +53,7 @@ provider:
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-typing-status
 
-        # ✅ S3 upload/download permissions
+        # ✅ S3 permissions
         - Effect: Allow
           Action:
             - s3:PutObject
@@ -172,37 +171,49 @@ functions:
           cors: true
 
   # --- Files (Upload Attachments) ---
-  # --- Files (Presigned Uploads) ---
-files:
-  handler: src/handlers/files.handler
-  events:
-    - http:
-        path: files
-        method: post
-        cors:
-          origin: '*'
-          headers:
-            - Content-Type
-            - Authorization
-          allowCredentials: false
-          methods:
-            - OPTIONS
-            - POST
-    - http:
-        path: files
-        method: options
-        integration: mock
-        request:
-          template:
-            application/json: '{"statusCode":200}'
-        response:
-          statusCodes:
-            200:
-              pattern: ''
-              headers:
-                Access-Control-Allow-Origin: "'*'"
-                Access-Control-Allow-Headers: "'Content-Type,Authorization'"
-                Access-Control-Allow-Methods: "'OPTIONS,POST'"
+  files:
+    handler: src/handlers/files.handler
+    events:
+      - http:
+          path: files
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
+            methods:
+              - OPTIONS
+              - POST
+      - http:
+          path: files
+          method: options
+          integration: mock
+          request:
+            template:
+              application/json: '{"statusCode":200}'
+          response:
+            statusCodes:
+              200:
+                pattern: ''
+                headers:
+                  Access-Control-Allow-Origin: "'*'"
+                  Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+                  Access-Control-Allow-Methods: "'OPTIONS,POST'"
+
+  # --- Pre-signed Upload URL ---
+  presignUpload:
+    handler: src/handlers/presignUpload.handler
+    events:
+      - http:
+          path: files/presign
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+            allowCredentials: false
 
   # --- Attachments (Download) ---
   getAttachment:

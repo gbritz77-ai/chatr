@@ -60,7 +60,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }, [currentUser]);
 
   /* =========================================================
-     Load Unread Counts
+     Load Unread Counts (with consistent chat IDs)
   ========================================================= */
   async function loadUnreadCounts() {
     if (!currentUser) return;
@@ -70,7 +70,9 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       );
       if (Array.isArray(res)) {
         const map = {};
-        for (const entry of res) map[entry.chatId] = entry.unreadCount;
+        for (const entry of res) {
+          map[entry.chatId] = entry.unreadCount;
+        }
         setUnreadMap(map);
       }
     } catch (err) {
@@ -80,7 +82,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
 
   useEffect(() => {
     loadUnreadCounts();
-    const timer = setInterval(loadUnreadCounts, 2000);
+    const timer = setInterval(loadUnreadCounts, 8000); // poll every 8s
     return () => clearInterval(timer);
   }, [currentUser]);
 
@@ -129,7 +131,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   return (
     <aside className="fixed top-0 left-0 bottom-0 w-[320px] bg-white border-r border-slate-200 flex flex-col z-20">
       {/* Header with Logo */}
-      <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+      <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between relative">
         <div className="flex flex-col items-center justify-center w-full">
           <img
             src="/logo/logo.JPG"
@@ -179,12 +181,15 @@ export default function Sidebar({ onSelectUser, currentUser }) {
           {groups.length ? (
             <div className="space-y-2">
               {groups.map((g) => {
-                const unread = unreadMap[g.groupid] || 0;
+                const key = `GROUP#${g.groupid}`;
+                const unread = unreadMap[key] || 0;
                 return (
                   <button
                     key={g.groupid}
                     onClick={() => {
+                      const key = `GROUP#${g.groupid}`;
                       setActiveChat(`group-${g.groupid}`);
+                      setUnreadMap((prev) => ({ ...prev, [key]: 0 })); // ✅ clear unread immediately
                       onSelectUser({
                         type: "group",
                         id: g.groupid,
@@ -204,7 +209,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                           {g.groupname}
                         </span>
                         {unread > 0 && (
-                          <span className="bg-gray-800 text-white text-xs px-2 py-0.5 rounded-full">
+                          <span className="bg-gray-800 text-white text-xs px-2 py-0.5 rounded-full transition-all duration-300">
                             {unread}
                           </span>
                         )}
@@ -243,7 +248,11 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                   <button
                     key={m.userid}
                     onClick={() => {
+                      const chatId = `CHAT#${[currentUser, m.userid]
+                        .sort()
+                        .join("#")}`;
                       setActiveChat(`user-${m.userid}`);
+                      setUnreadMap((prev) => ({ ...prev, [chatId]: 0 })); // ✅ clear unread immediately
                       onSelectUser({
                         type: "user",
                         username: m.userid,
@@ -267,7 +276,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                           {m.profileName || m.userid}
                         </span>
                         {unread > 0 && (
-                          <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                          <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full transition-all duration-300">
                             {unread}
                           </span>
                         )}
