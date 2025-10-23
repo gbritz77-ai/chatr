@@ -125,11 +125,12 @@ export default function ChatWindow({ activeUser, currentUser }) {
   async function getPresignedUrl(file) {
     console.log("📦 Requesting presign for:", { name: file.name, type: file.type });
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE}/files/presign`, {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE}/presign-upload`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: file.name, type: file.type }),
       });
+
       const data = await res.json();
       console.log("📜 Presign response:", data);
       if (!data.success || !data.uploadURL) throw new Error("Presign failed");

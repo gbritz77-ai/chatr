@@ -202,7 +202,7 @@ functions:
                   Access-Control-Allow-Headers: "'Content-Type,Authorization'"
                   Access-Control-Allow-Methods: "'OPTIONS,POST'"
 
-  # --- ✅ Pre-signed Upload URL (Fixed Path) ---
+  # --- ✅ Pre-signed Upload URL (Fixed Indentation) ---
   presignUpload:
     handler: src/handlers/presignUpload.handler
     events:
@@ -213,6 +213,7 @@ functions:
             origin: '*'
             headers:
               - Content-Type
+              - Authorization
             allowCredentials: false
 
   # --- Attachments (Download) ---
