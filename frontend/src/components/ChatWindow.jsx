@@ -6,7 +6,7 @@ import { Avatar } from "../components/Avatar";
 import { Send, Smile, Paperclip, Loader2, FileText } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — Presigned Upload + Attachment Display
+   💬 ChatWindow — Presigned Upload + Attachment Display + GIF Fix
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -35,9 +35,13 @@ export default function ChatWindow({ activeUser, currentUser }) {
     try {
       let url = "";
       if (activeUser.type === "group") {
-        url = `/messages?groupid=${encodeURIComponent(activeUser.id)}&username=${encodeURIComponent(currentUser)}`;
+        url = `/messages?groupid=${encodeURIComponent(
+          activeUser.id
+        )}&username=${encodeURIComponent(currentUser)}`;
       } else if (activeUser.type === "user") {
-        url = `/messages?userA=${encodeURIComponent(currentUser)}&userB=${encodeURIComponent(activeUser.username)}`;
+        url = `/messages?userA=${encodeURIComponent(
+          currentUser
+        )}&userB=${encodeURIComponent(activeUser.username)}`;
       }
 
       const res = await getJSON(url);
@@ -257,6 +261,8 @@ export default function ChatWindow({ activeUser, currentUser }) {
       ? `${S3_BUCKET_URL}/${msg.attachmentKey}`
       : null;
 
+    const isGif = msg.attachmentType === "image/gif";
+
     return (
       <div
         key={msg.messageid || `${msg.sender}-${msg.timestamp}`}
@@ -285,7 +291,14 @@ export default function ChatWindow({ activeUser, currentUser }) {
           {/* 📎 ATTACHMENT PREVIEW */}
           {fileUrl && (
             <div className="mt-2">
-              {isImage ? (
+              {isGif ? (
+                // 🔁 Animated GIF inline autoplay
+                <img
+                  src={`${fileUrl}?${Date.now()}`}
+                  alt="animated gif"
+                  className="max-h-64 rounded-lg border border-slate-300 object-contain"
+                />
+              ) : isImage ? (
                 <a
                   href={fileUrl}
                   target="_blank"
@@ -400,7 +413,11 @@ export default function ChatWindow({ activeUser, currentUser }) {
               className="p-2 rounded-full cursor-pointer text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition"
             >
               <Paperclip className="w-5 h-5" />
-              <input type="file" hidden onChange={(e) => handleFileChange(e.target.files[0])} />
+              <input
+                type="file"
+                hidden
+                onChange={(e) => handleFileChange(e.target.files[0])}
+              />
             </label>
 
             {attachment && (
@@ -422,7 +439,9 @@ export default function ChatWindow({ activeUser, currentUser }) {
               type="submit"
               disabled={uploading}
               className={`p-3 rounded-full shadow-sm transition ${
-                uploading ? "bg-slate-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"
+                uploading
+                  ? "bg-slate-400 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700 text-white"
               }`}
             >
               {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
