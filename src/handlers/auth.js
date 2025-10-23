@@ -20,53 +20,147 @@ exports.handler = async (event) => {
   console.log("📩 AUTH EVENT:", JSON.stringify(event, null, 2));
 
   try {
-    // Parse and validate incoming body
+    const path = event.path?.toLowerCase() || "";
+    const method = event.httpMethod || "POST";
     const body = JSON.parse(event.body || "{}");
-    console.log("🧾 Parsed body:", body);
 
-    const { username, password } = body;
-    if (!username || !password) {
-      console.warn("⚠️ Missing credentials:", { username, password });
-      return response(400, { success: false, message: "Missing credentials" });
+    console.log("📦 Path:", path, "Method:", method, "Body:", body);
+
+    /* ============================================================
+       🧩 REGISTER NEW USER (POST /auth/register)
+    ============================================================ */
+    if (method === "POST" && path.endsWith("/auth/register")) {
+      const { username, password, profileName } = body;
+
+      if (!username || !password || !profileName) {
+        return response(400, {
+          success: false,
+          message:
+            "Missing required fields (username, password, profileName)",
+        });
+      }
+
+      const email = username.trim().toLowerCase();
+      const normalizedName = profileName.trim();
+
+      // Check if user already exists by email
+      const existing = await dynamodb
+        .get({ TableName: TABLE_NAME, Key: { userid: email } })
+        .promise();
+
+      if (existing.Item) {
+        return response(400, {
+          success: false,
+          message: "A user with that email already exists.",
+        });
+      }
+
+      // Check if profile name is already taken
+      const nameCheck = await dynamodb
+        .scan({
+          TableName: TABLE_NAME,
+          FilterExpression: "profileName = :n",
+          ExpressionAttributeValues: { ":n": normalizedName },
+          ProjectionExpression: "userid, profileName",
+        })
+        .promise();
+
+      if (nameCheck.Items && nameCheck.Items.length > 0) {
+        return response(400, {
+          success: false,
+          message: "Profile name already exists. Please choose another name.",
+        });
+      }
+
+      // Hash password
+      const hashed = await bcrypt.hash(password, 10);
+
+      const newUser = {
+        userid: email,
+        profileName: normalizedName,
+        password: hashed,
+        createdAt: new Date().toISOString(),
+      };
+
+      await dynamodb.put({ TableName: TABLE_NAME, Item: newUser }).promise();
+
+      console.log("✅ User registered successfully:", email);
+
+      return response(201, {
+        success: true,
+        message: "Registration successful",
+        user: {
+          userid: email,
+          profileName: newUser.profileName,
+        },
+      });
     }
 
-    const email = username.trim().toLowerCase();
-    console.log("📧 Normalized email:", email);
+    /* ============================================================
+       🔐 LOGIN EXISTING USER (POST /auth)
+    ============================================================ */
+    if (method === "POST" && path.endsWith("/auth")) {
+      const { username, password } = body;
 
-    // Fetch user record from DynamoDB
-    console.log(`🔍 Fetching user from table [${TABLE_NAME}]...`);
-    const result = await dynamodb
-      .get({ TableName: TABLE_NAME, Key: { userid: email } })
-      .promise();
-    console.log("📦 DynamoDB result:", JSON.stringify(result, null, 2));
+      if (!username || !password) {
+        return response(400, {
+          success: false,
+          message: "Missing credentials",
+        });
+      }
 
-    const user = result.Item;
-    if (!user) {
-      console.warn("🚫 User not found in table:", email);
-      return response(404, { success: false, message: "User not found" });
+      const email = username.trim().toLowerCase();
+
+      // Fetch user record
+      const result = await dynamodb
+        .get({ TableName: TABLE_NAME, Key: { userid: email } })
+        .promise();
+
+      const user = result.Item;
+      if (!user) {
+        return response(404, {
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      const valid = await bcrypt.compare(password, user.password || "");
+      if (!valid) {
+        return response(401, {
+          success: false,
+          message: "Invalid password",
+        });
+      }
+
+      // Generate JWT token
+      const token = jwt.sign(
+        { userid: email, profileName: user.profileName },
+        JWT_SECRET,
+        { expiresIn: "12h" }
+      );
+
+      console.log("✅ Login successful:", email);
+
+      return response(200, {
+        success: true,
+        token,
+        profileName: user.profileName,
+        userid: email,
+      });
     }
 
-    // Debug password fields
-    console.log("🔑 Stored password field type:", typeof user.password);
-    console.log("🔐 Comparing provided password...");
-
-    // Compare password hashes
-    const valid = await bcrypt.compare(password, user.password);
-    console.log("🧮 Password match result:", valid);
-
-    if (!valid) {
-      console.warn("❌ Invalid password for user:", email);
-      return response(401, { success: false, message: "Invalid password" });
-    }
-
-    // Generate JWT token
-    if (!JWT_SECRET) console.error("❗ JWT_SECRET is undefined!");
-    const token = jwt.sign({ userid: email }, JWT_SECRET, { expiresIn: "12h" });
-
-    console.log("✅ Login successful for:", email);
-    return response(200, { success: true, token });
+    /* ============================================================
+       ❌ Invalid path
+    ============================================================ */
+    return response(404, {
+      success: false,
+      message: "Invalid path or method",
+    });
   } catch (err) {
-    console.error("💥 AUTH ERROR DETAILS:", err.stack || err);
-    return response(500, { success: false, message: err.message });
+    console.error("💥 AUTH ERROR:", err);
+    return response(500, {
+      success: false,
+      message: err.message || "Internal server error",
+    });
   }
 };

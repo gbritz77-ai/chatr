@@ -1,8 +1,10 @@
+// src/handlers/messages.js
 const AWS = require("aws-sdk");
 const crypto = require("crypto");
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const TABLE_NAME = process.env.MESSAGES_TABLE || "chatr-messages";
+const MEMBERS_TABLE = process.env.MEMBERS_TABLE || "chatr-members";
 
 const response = (statusCode, body) => ({
   statusCode,
@@ -15,10 +17,30 @@ const response = (statusCode, body) => ({
   body: JSON.stringify(body),
 });
 
+/* ---------------------------------------------------------
+   🔹 Helper: Get ProfileName for a given user ID
+--------------------------------------------------------- */
+async function getProfileName(userid) {
+  try {
+    const res = await dynamodb
+      .get({
+        TableName: MEMBERS_TABLE,
+        Key: { userid },
+        ProjectionExpression: "profileName",
+      })
+      .promise();
+    return res.Item?.profileName || userid;
+  } catch (err) {
+    console.error("⚠️ Failed to get profile name for", userid, err);
+    return userid;
+  }
+}
+
 exports.handler = async (event) => {
   console.log("📩 Event received:", event);
   const method = event.httpMethod;
-  const path = event.path || "";
+  const rawPath = event.path || "";
+  const path = rawPath.toLowerCase();
   const params = event.queryStringParameters || {};
   const body = event.body ? JSON.parse(event.body) : {};
 
@@ -27,16 +49,18 @@ exports.handler = async (event) => {
        📨 POST /messages  → Send message
     =========================================================== */
     if (method === "POST" && path.endsWith("/messages")) {
-      const { sender, recipient, text, groupid } = body;
+      const { sender, recipient, text, groupid, attachmentKey, attachmentType } = body;
       if (!sender || (!recipient && !groupid) || !text)
         return response(400, { success: false, message: "Missing fields" });
 
       const message = {
         messageid: crypto.randomUUID(),
         sender,
-        recipient,
+        recipient: recipient || null,
         groupid: groupid || null,
         text,
+        attachmentKey: attachmentKey || null,
+        attachmentType: attachmentType || null,
         read: false,
         timestamp: new Date().toISOString(),
       };
@@ -46,13 +70,13 @@ exports.handler = async (event) => {
     }
 
     /* ===========================================================
-       📬 GET /messages?userA=&userB=
-       Returns conversation between 2 users
+       💬 GET /messages?userA=&userB=
+       Returns conversation between 2 users (includes profile names)
     =========================================================== */
     if (method === "GET" && params.userA && params.userB) {
       const { userA, userB } = params;
-      const result = await dynamodb.scan({ TableName: TABLE_NAME }).promise();
 
+      const result = await dynamodb.scan({ TableName: TABLE_NAME }).promise();
       const messages =
         result.Items?.filter(
           (m) =>
@@ -60,8 +84,33 @@ exports.handler = async (event) => {
             (m.sender === userB && m.recipient === userA)
         ) || [];
 
-      // Sort ascending by time
       messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+      // ✅ Attach senderProfileName
+      for (const msg of messages) {
+        msg.senderProfileName = await getProfileName(msg.sender);
+      }
+
+      return response(200, { success: true, messages });
+    }
+
+    /* ===========================================================
+       👥 GET /messages?groupid=
+       Returns group chat messages (includes profile names)
+    =========================================================== */
+    if (method === "GET" && params.groupid) {
+      const { groupid } = params;
+
+      const result = await dynamodb.scan({ TableName: TABLE_NAME }).promise();
+      const messages =
+        result.Items?.filter((m) => m.groupid === groupid) || [];
+
+      messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+      // ✅ Attach senderProfileName
+      for (const msg of messages) {
+        msg.senderProfileName = await getProfileName(msg.sender);
+      }
 
       return response(200, { success: true, messages });
     }
@@ -79,7 +128,7 @@ exports.handler = async (event) => {
         (m) => m.recipient === username && !m.read
       ).length;
 
-      return response(200, { success: true, unreadCount: unread });
+      return response(200, { success: true, unreadCount: unread || 0 });
     }
 
     /* ===========================================================
@@ -94,30 +143,34 @@ exports.handler = async (event) => {
         });
 
       const result = await dynamodb.scan({ TableName: TABLE_NAME }).promise();
-      const updates = result.Items?.filter(
-        (m) => m.recipient === username && m.sender === chatWith && !m.read
-      );
+      const unreadMessages =
+        result.Items?.filter(
+          (m) =>
+            m.recipient === username &&
+            m.sender === chatWith &&
+            m.read === false
+        ) || [];
 
-      if (!updates?.length)
-        return response(200, { success: true, updated: 0 });
-
-      for (const msg of updates) {
+      for (const msg of unreadMessages) {
         await dynamodb
           .update({
             TableName: TABLE_NAME,
             Key: { messageid: msg.messageid },
-            UpdateExpression: "set #r = :val",
+            UpdateExpression: "SET #r = :val",
             ExpressionAttributeNames: { "#r": "read" },
             ExpressionAttributeValues: { ":val": true },
           })
           .promise();
       }
 
-      return response(200, { success: true, updated: updates.length });
+      return response(200, {
+        success: true,
+        updated: unreadMessages.length,
+      });
     }
 
     /* ===========================================================
-       ❌ Not supported
+       ❌ Invalid path
     =========================================================== */
     return response(404, { success: false, message: "Invalid path or method" });
   } catch (err) {

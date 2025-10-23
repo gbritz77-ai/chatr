@@ -22,6 +22,9 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
   const messagesEndRef = useRef(null);
   const typingTimer = useRef(null);
 
+  const currentProfileName =
+    localStorage.getItem("profileName") || currentUser;
+
   /* ----------------------------------------------------
      LOAD MESSAGES
   ---------------------------------------------------- */
@@ -29,21 +32,32 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
     if (!activeUser || !currentUser) return;
     try {
       let url = "";
-      if (activeUser.type === "group")
+      if (activeUser.type === "group") {
         url = `/messages?groupid=${encodeURIComponent(
           activeUser.id
         )}&username=${encodeURIComponent(currentUser)}`;
-      else if (activeUser.type === "user")
+      } else if (activeUser.type === "user") {
         url = `/messages?userA=${encodeURIComponent(
           currentUser
         )}&userB=${encodeURIComponent(activeUser.username)}`;
+      }
 
       const res = await getJSON(url);
-      setMessages(res?.data || []);
+      setMessages(res?.messages || []);
     } catch (err) {
       console.error("❌ Failed to load messages:", err);
     }
   }
+
+  /* ----------------------------------------------------
+     AUTO-REFRESH EVERY 2 SECONDS
+  ---------------------------------------------------- */
+  useEffect(() => {
+    if (!activeUser || !currentUser) return;
+    loadMessages();
+    const interval = setInterval(loadMessages, 2000);
+    return () => clearInterval(interval);
+  }, [activeUser, currentUser]);
 
   /* ----------------------------------------------------
      MARK CHAT AS READ
@@ -68,15 +82,16 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
   }
 
   /* ----------------------------------------------------
-     PRESENCE + TYPING (SIMULATED EXAMPLE)
+     PRESENCE + TYPING (Simulated)
   ---------------------------------------------------- */
   useEffect(() => {
-    // Simulated live presence
     const interval = setInterval(() => {
-      setOnlineUsers((prev) => ({
-        ...prev,
-        [activeUser?.username]: Math.random() > 0.2, // 80% chance online
-      }));
+      if (activeUser?.username) {
+        setOnlineUsers((prev) => ({
+          ...prev,
+          [activeUser.username]: Math.random() > 0.2, // 80% chance online
+        }));
+      }
     }, 5000);
     return () => clearInterval(interval);
   }, [activeUser]);
@@ -94,11 +109,10 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
     }, 2000);
   }
 
-  // Simulated remote typing indicator
   useEffect(() => {
     if (!activeUser) return;
     const interval = setInterval(() => {
-      setRemoteTyping(Math.random() > 0.85); // 15% random chance they type
+      setRemoteTyping(Math.random() > 0.85);
     }, 3000);
     return () => clearInterval(interval);
   }, [activeUser]);
@@ -176,7 +190,12 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
 
   function renderBubble(msg) {
     const isMine = msg.sender === currentUser;
-    const time = new Date(msg.createdAt).toLocaleString([], {
+    const senderName =
+      msg.sender === currentUser
+        ? currentProfileName
+        : msg.senderProfileName || msg.sender || "Unknown";
+
+    const time = new Date(msg.timestamp).toLocaleString([], {
       hour: "2-digit",
       minute: "2-digit",
       day: "2-digit",
@@ -187,15 +206,15 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
 
     return (
       <div
-        key={msg.messageid || `${msg.sender}-${msg.createdAt}`}
+        key={msg.messageid || `${msg.sender}-${msg.timestamp}`}
         className={`flex items-end gap-2 ${
           isMine ? "flex-row-reverse text-right" : "flex-row text-left"
         }`}
       >
         <div className="relative">
           <Avatar
-            seed={msg.sender || "Unknown"}
-            username={msg.sender || "Unknown"}
+            seed={senderName}
+            username={senderName}
             size={10}
             style="micah"
           />
@@ -211,6 +230,11 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
               : "bg-white border text-slate-800"
           }`}
         >
+          {!isMine && (
+            <div className="text-xs font-semibold text-slate-500 mb-1">
+              {senderName}
+            </div>
+          )}
           {msg.text && (
             <div className="whitespace-pre-wrap break-words">{msg.text}</div>
           )}
@@ -248,23 +272,13 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
         {activeUser ? (
           <>
             <Avatar
-              seed={
-                activeUser.type === "group"
-                  ? activeUser.name
-                  : activeUser.username
-              }
-              username={
-                activeUser.type === "group" ? null : activeUser.username
-              }
+              seed={activeUser.name || activeUser.username}
+              username={activeUser.name || activeUser.username}
               size={10}
               style="micah"
             />
             <div>
-              <div>
-                {activeUser.type === "group"
-                  ? activeUser.name
-                  : activeUser.username}
-              </div>
+              <div>{activeUser.name || activeUser.username}</div>
               {remoteTyping && (
                 <div className="text-xs text-slate-500 animate-pulse">
                   typing...
@@ -317,7 +331,11 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
                 ref={pickerRef}
                 className="absolute bottom-16 left-0 z-50 shadow-xl border rounded-lg bg-white"
               >
-                <Picker data={data} theme="light" onEmojiSelect={handleEmojiSelect} />
+                <Picker
+                  data={data}
+                  theme="light"
+                  onEmojiSelect={handleEmojiSelect}
+                />
               </div>
             )}
 
