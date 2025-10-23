@@ -1,5 +1,5 @@
 // src/handlers/groups.js
-import AWS from "aws-sdk";
+const AWS = require("aws-sdk");
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const TABLE_NAME = process.env.GROUPS_TABLE || "chatr-groups";
@@ -13,11 +13,12 @@ const response = (statusCode, body) => ({
   body: JSON.stringify(body),
 });
 
-export const handler = async (event) => {
+exports.handler = async (event) => {
+  console.log("📩 GROUPS EVENT:", JSON.stringify(event, null, 2));
+
   try {
     const method = event.httpMethod;
 
-    // ✅ Create new group
     if (method === "POST") {
       const body = JSON.parse(event.body || "{}");
       const { groupname, members } = body;
@@ -33,14 +34,10 @@ export const handler = async (event) => {
         createdAt: new Date().toISOString(),
       };
 
-      await dynamodb
-        .put({ TableName: TABLE_NAME, Item: group })
-        .promise();
-
+      await dynamodb.put({ TableName: TABLE_NAME, Item: group }).promise();
       return response(200, { success: true, data: group });
     }
 
-    // ✅ Get only groups this user belongs to
     if (method === "GET") {
       const username = event.queryStringParameters?.username;
       if (!username)
@@ -55,7 +52,7 @@ export const handler = async (event) => {
 
     return response(405, { success: false, message: "Method not allowed" });
   } catch (err) {
-    console.error("❌ groups handler error:", err);
+    console.error("❌ GROUPS HANDLER ERROR:", err);
     return response(500, { success: false, message: err.message });
   }
 };

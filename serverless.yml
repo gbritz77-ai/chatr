@@ -15,7 +15,7 @@ custom:
     reloadHandler: true
     ignoreJWTSignature: true
     corsAllowOrigin: "*"
-    noPrependStageInUrl: false   # ✅ keeps /dev prefix visible in URLs
+    noPrependStageInUrl: false  # ✅ keeps /dev prefix visible in URLs
 
 provider:
   name: aws
@@ -23,9 +23,8 @@ provider:
   region: eu-west-2
   stage: dev
 
-  # ✅ LOCAL .env still loads via serverless-dotenv-plugin,
-  # but these are explicitly set for AWS deployment
   environment:
+    # ✅ Global env vars for all Lambdas
     JWT_SECRET: SuperSecretKey123!
     VITE_API_BASE: https://byu72oz79h.execute-api.eu-west-2.amazonaws.com/dev
     MEMBERS_TABLE: chatr-members
@@ -35,40 +34,41 @@ provider:
     ATTACHMENTS_BUCKET: outsec-chat-bucket
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
 
-  iamRoleStatements:
-    # ✅ DynamoDB access
-    - Effect: Allow
-      Action:
-        - dynamodb:PutItem
-        - dynamodb:GetItem
-        - dynamodb:UpdateItem
-        - dynamodb:Query
-        - dynamodb:Scan
-        - dynamodb:DeleteItem
-      Resource:
-        - arn:aws:dynamodb:eu-west-2:*:table/chatr-members
-        - arn:aws:dynamodb:eu-west-2:*:table/chatr-messages
-        - arn:aws:dynamodb:eu-west-2:*:table/chatr-groups
-        - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
+  iam:
+    role:
+      statements:
+        # ✅ DynamoDB full access for the four app tables
+        - Effect: Allow
+          Action:
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:eu-west-2:*:table/chatr-members
+            - arn:aws:dynamodb:eu-west-2:*:table/chatr-messages
+            - arn:aws:dynamodb:eu-west-2:*:table/chatr-groups
+            - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
 
-    # ✅ S3 access
-    - Effect: Allow
-      Action:
-        - s3:PutObject
-        - s3:GetObject
-        - s3:DeleteObject
-      Resource:
-        - arn:aws:s3:::outsec-chat-bucket/*
-        - arn:aws:s3:::outsec-chat-bucket
+        # ✅ S3 access
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:DeleteObject
+          Resource:
+            - arn:aws:s3:::outsec-chat-bucket
+            - arn:aws:s3:::outsec-chat-bucket/*
 
-    # ✅ CloudWatch logging
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource:
-        - arn:aws:logs:eu-west-2:*:log-group:*
+        # ✅ CloudWatch logging (all functions)
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: arn:aws:logs:eu-west-2:*:log-group:*
 
 # ============================================================
 #                     FUNCTION DEFINITIONS
@@ -80,6 +80,15 @@ functions:
     events:
       - http:
           path: auth
+          method: post
+          cors: true
+
+  # --- Register ---
+  register:
+    handler: src/handlers/register.handler
+    events:
+      - http:
+          path: auth/register
           method: post
           cors: true
 
@@ -105,15 +114,6 @@ functions:
           method: any
           cors: true
 
-  # --- Files ---
-  files:
-    handler: src/handlers/files.handler
-    events:
-      - http:
-          path: files
-          method: any
-          cors: true
-
   # --- Groups ---
   groups:
     handler: src/handlers/groups.handler
@@ -123,13 +123,13 @@ functions:
           method: any
           cors: true
 
-  # --- Register ---
-  register:
-    handler: src/handlers/register.handler
+  # --- Files ---
+  files:
+    handler: src/handlers/files.handler
     events:
       - http:
-          path: auth/register
-          method: post
+          path: files
+          method: any
           cors: true
 
   # --- Attachments (Download) ---
@@ -144,48 +144,3 @@ functions:
             parameters:
               querystrings:
                 key: true
-
-# ============================================================
-#                      RESOURCE DEFINITIONS
-# ============================================================
-#resources:
-#  Resources:
-#    ChatMessagesTable:
-#      Type: AWS::DynamoDB::Table
-#      Properties:
-#        TableName: chatr-messages
-#        BillingMode: PAY_PER_REQUEST
-#        AttributeDefinitions:
-#          - AttributeName: messageid
-#            AttributeType: S
-#        KeySchema:
-#          - AttributeName: messageid
-#            KeyType: HASH
-
-#    ChatGroupsTable:
-#      Type: AWS::DynamoDB::Table
-#      Properties:
-#        TableName: chatr-groups
-#        BillingMode: PAY_PER_REQUEST
-#        AttributeDefinitions:
-#          - AttributeName: groupid
-#            AttributeType: S
-#        KeySchema:
-#          - AttributeName: groupid
-#            KeyType: HASH#
-
-#    ChatReadTrackingTable:
-#      Type: AWS::DynamoDB::Table
-#      Properties:
-#        TableName: chatr-read-tracking
-#        BillingMode: PAY_PER_REQUEST
-#        AttributeDefinitions:
-#          - AttributeName: chatid
-#            AttributeType: S
-#          - AttributeName: username
-#            AttributeType: S
-#        KeySchema:
-#          - AttributeName: chatid
-#            KeyType: HASH
-#          - AttributeName: username
-#            KeyType: RANGE
