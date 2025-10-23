@@ -1,9 +1,9 @@
 // src/handlers/members.js
 const AWS = require("aws-sdk");
-
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const TABLE_NAME = process.env.MEMBERS_TABLE || "chatr-members";
 
+// ✅ Reusable HTTP response helper
 const response = (statusCode, body) => ({
   statusCode,
   headers: {
@@ -16,19 +16,29 @@ const response = (statusCode, body) => ({
 });
 
 exports.handler = async (event) => {
-  console.log("👥 MEMBERS EVENT:", event);
-  const method = event.httpMethod;
+  console.log("👥 MEMBERS EVENT:", JSON.stringify(event));
+
+  const method = event.httpMethod || "GET";
+
+  // ✅ Handle CORS preflight
+  if (method === "OPTIONS") {
+    return response(200, { message: "CORS preflight success" });
+  }
 
   try {
     /* ===========================================================
        📜 GET /members → List all members
     =========================================================== */
-    if (method === "GET") {
+    if (method === "GET" && !event.pathParameters) {
       const result = await dynamodb
         .scan({
           TableName: TABLE_NAME,
+          // ✅ Fix reserved keyword 'role' using ExpressionAttributeNames
           ProjectionExpression:
-            "userid, profileName, createdAt, lastLogin, role",
+            "userid, profileName, createdAt, lastLogin, #r",
+          ExpressionAttributeNames: {
+            "#r": "role",
+          },
         })
         .promise();
 
@@ -55,8 +65,12 @@ exports.handler = async (event) => {
         })
         .promise();
 
-      if (!result.Item)
-        return response(404, { success: false, message: "Member not found" });
+      if (!result.Item) {
+        return response(404, {
+          success: false,
+          message: "Member not found",
+        });
+      }
 
       return response(200, {
         success: true,

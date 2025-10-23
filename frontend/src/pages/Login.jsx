@@ -42,7 +42,7 @@ export default function Login() {
           <img
             src="/logo/logo.JPG" // ✅ Correct public path
             alt="CHATR Logo"
-            className="w-28 h-28 rounded-lg shadow-lg border border-slate-600 mb-3"
+            className="w-40 h-24 rounded-lg shadow-lg border border-slate-600 mb-3"
           />
          
           <p className="text-slate-400 text-sm">Stay connected. Instantly.</p>
