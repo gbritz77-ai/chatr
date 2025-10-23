@@ -62,9 +62,10 @@ export default function Register() {
 
     setLoading(true);
     try {
-      const res = await postJSON("/register", {
+      const res = await postJSON("/auth/register", {
         username,
         password,
+        confirmPassword,
         profileName,
       });
 

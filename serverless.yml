@@ -17,34 +17,6 @@ custom:
     corsAllowOrigin: "*"
     noPrependStageInUrl: false # ✅ keeps /dev prefix visible in URLs
 
-  # 🆕 Global CORS Configuration
-  apiGateway:
-    shouldStartNameWithService: true
-    minimumCompressionSize: 1024
-    binaryMediaTypes:
-      - '*/*'
-    # 🆕 This defines global CORS policy for all endpoints
-    restApi:
-      metricsEnabled: true
-      loggingLevel: INFO
-      endpointType: EDGE
-    cors:
-      origin: "*"
-      headers:
-        - Content-Type
-        - Authorization
-        - X-Amz-Date
-        - X-Api-Key
-        - X-Amz-Security-Token
-      allowCredentials: false
-      maxAge: 86400
-      methods:
-        - OPTIONS
-        - GET
-        - POST
-        - PUT
-        - DELETE
-
 provider:
   name: aws
   runtime: nodejs20.x
@@ -111,14 +83,62 @@ functions:
       - http:
           path: auth
           method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
+            methods:
+              - OPTIONS
+              - POST
+      - http:
+          path: auth
+          method: options
+          integration: mock
+          request:
+            template:
+              application/json: '{"statusCode":200}'
+          response:
+            statusCodes:
+              200:
+                pattern: ''
+                headers:
+                  Access-Control-Allow-Origin: "'*'"
+                  Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+                  Access-Control-Allow-Methods: "'OPTIONS,POST'"
 
   # --- Register ---
   register:
     handler: src/handlers/register.handler
     events:
       - http:
-          path: auth/register
+          path: register
           method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
+            methods:
+              - OPTIONS
+              - POST
+      - http:
+          path: register
+          method: options
+          integration: mock
+          request:
+            template:
+              application/json: '{"statusCode":200}'
+          response:
+            statusCodes:
+              200:
+                pattern: ''
+                headers:
+                  Access-Control-Allow-Origin: "'*'"
+                  Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+                  Access-Control-Allow-Methods: "'OPTIONS,POST'"
 
   # --- Members ---
   members:
@@ -127,6 +147,7 @@ functions:
       - http:
           path: members
           method: any
+          cors: true
 
   # --- Messages ---
   messages:
@@ -135,9 +156,11 @@ functions:
       - http:
           path: messages
           method: any
+          cors: true
       - http:
           path: messages/{proxy+}
           method: any
+          cors: true
 
   # --- Groups ---
   groups:
@@ -146,6 +169,7 @@ functions:
       - http:
           path: groups
           method: any
+          cors: true
 
   # --- Files ---
   files:
@@ -154,6 +178,7 @@ functions:
       - http:
           path: files
           method: any
+          cors: true
 
   # --- Attachments (Download) ---
   getAttachment:
@@ -162,6 +187,7 @@ functions:
       - http:
           path: attachments
           method: get
+          cors: true
           request:
             parameters:
               querystrings:
@@ -174,9 +200,12 @@ functions:
       - http:
           path: typing/start
           method: post
+          cors: true
       - http:
           path: typing/stop
           method: post
+          cors: true
       - http:
           path: typing
           method: get
+          cors: true
