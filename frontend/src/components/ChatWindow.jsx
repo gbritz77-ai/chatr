@@ -115,51 +115,70 @@ export default function ChatWindow({ activeUser, currentUser }) {
      AUTO-SCROLL
   ---------------------------------------------------- */
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "end",
-    });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
   /* ----------------------------------------------------
-     PRESIGNED UPLOAD WITH PROGRESS
+     PRESIGNED UPLOAD + DEBUG
   ---------------------------------------------------- */
-  async function uploadToS3(file, presignedUrl) {
-  console.log("🧩 Upload start", { name: file.name, type: file.type, size: file.size });
-  console.log("🔗 Upload URL", presignedUrl);
-
-  try {
-    const res = await fetch(presignedUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": file.type,
-        "x-amz-acl": "public-read", // must match your presign
-      },
-      body: file,
-    });
-
-    console.log("📡 PUT request headers sent:", {
-      "Content-Type": file.type,
-      "x-amz-acl": "public-read",
-    });
-
-    console.log("📬 S3 Response:", res.status, res.statusText);
-
-    if (!res.ok) {
-      const text = await res.text();
-      console.error("❌ Upload failed: ", text);
-      throw new Error(`Upload failed: ${res.status} ${text}`);
+  async function getPresignedUrl(file) {
+    console.log("📦 Requesting presign for:", { name: file.name, type: file.type });
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_API_BASE}/files/presign`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name, type: file.type }),
+        }
+      );
+      const data = await res.json();
+      console.log("📜 Presign response:", data);
+      if (!data.success || !data.uploadURL) throw new Error("Presign failed");
+      return data;
+    } catch (err) {
+      console.error("❌ Presign error:", err);
+      throw err;
     }
-
-    console.log("✅ Upload succeeded!");
-    return true;
-  } catch (err) {
-    console.error("🚨 Upload error:", err);
-    alert(`Upload failed: ${err.message}`);
-    return false;
   }
-}
 
+  async function uploadToS3(file, presignedUrl) {
+    console.log("🧩 Upload start", { name: file.name, type: file.type, size: file.size });
+    console.log("🔗 Upload URL", presignedUrl);
+
+    setUploading(true);
+    setUploadProgress(0);
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", presignedUrl);
+      xhr.setRequestHeader("Content-Type", file.type);
+      xhr.setRequestHeader("x-amz-acl", "public-read");
+
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          setUploadProgress(percent);
+        }
+      });
+
+      xhr.onload = () => {
+        console.log("📬 S3 upload response:", xhr.status, xhr.statusText);
+        setUploading(false);
+        setUploadProgress(100);
+        if (xhr.status === 200) resolve(true);
+        else reject(new Error(`Upload failed: ${xhr.status}`));
+      };
+
+      xhr.onerror = (err) => {
+        console.error("🚨 Upload network error:", err);
+        setUploading(false);
+        reject(err);
+      };
+
+      xhr.send(file);
+    });
+  }
 
   /* ----------------------------------------------------
      SEND MESSAGE
@@ -174,12 +193,14 @@ export default function ChatWindow({ activeUser, currentUser }) {
       let fileType = null;
 
       if (attachment) {
-        const uploadRes = await uploadToS3(attachment);
-        if (uploadRes?.success) {
-          fileUrl = uploadRes.url;
-          fileKey = uploadRes.key;
-          fileType = uploadRes.type;
-        }
+        console.log("📎 Uploading attachment:", attachment.name);
+        const presign = await getPresignedUrl(attachment);
+        await uploadToS3(attachment, presign.uploadURL);
+
+        fileUrl = presign.publicUrl;
+        fileKey = presign.fileKey;
+        fileType = attachment.type;
+        console.log("✅ Uploaded file:", { fileUrl, fileKey, fileType });
       }
 
       const payload =
@@ -201,7 +222,9 @@ export default function ChatWindow({ activeUser, currentUser }) {
               attachmentType: fileType,
             };
 
+      console.log("📤 Sending message payload:", payload);
       await postJSON("/messages", payload);
+
       setText("");
       setAttachment(null);
       setShowEmojiPicker(false);
@@ -209,6 +232,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       await markAsRead();
     } catch (err) {
       console.error("❌ Failed to send message:", err);
+      alert("Message send failed: " + err.message);
     }
   }
 
@@ -269,11 +293,8 @@ export default function ChatWindow({ activeUser, currentUser }) {
           {!isMine && (
             <div className="text-xs font-semibold text-slate-500 mb-1">{senderName}</div>
           )}
-          {msg.text && (
-            <div className="whitespace-pre-wrap break-words">{msg.text}</div>
-          )}
+          {msg.text && <div className="whitespace-pre-wrap break-words">{msg.text}</div>}
 
-          {/* 🖼️ Inline Image Preview */}
           {isImage && msg.attachmentUrl && (
             <a
               href={msg.attachmentUrl}
@@ -289,7 +310,6 @@ export default function ChatWindow({ activeUser, currentUser }) {
             </a>
           )}
 
-          {/* 📎 Non-image file link */}
           {!isImage && msg.attachmentUrl && (
             <a
               href={msg.attachmentUrl}
@@ -301,11 +321,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
             </a>
           )}
 
-          <div
-            className={`text-xs mt-2 ${
-              isMine ? "text-blue-200" : "text-slate-500"
-            }`}
-          >
+          <div className={`text-xs mt-2 ${isMine ? "text-blue-200" : "text-slate-500"}`}>
             {time}
           </div>
         </div>
@@ -428,11 +444,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
                   : "bg-blue-600 hover:bg-blue-700 text-white"
               }`}
             >
-              {uploading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Send className="w-5 h-5" />
-              )}
+              {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </button>
           </form>
         </div>
