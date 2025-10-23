@@ -7,34 +7,38 @@ const dynamodb = new AWS.DynamoDB.DocumentClient();
 const TABLE_NAME = process.env.MEMBERS_TABLE || "chatr-members";
 const JWT_SECRET = process.env.JWT_SECRET;
 
+/* ===========================================================
+   🧱 Common Headers + Helper
+=========================================================== */
+const headers = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type,Authorization",
+  "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
+};
+
 const response = (statusCode, body) => ({
   statusCode,
-  headers: {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type,Authorization",
-    "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
-  },
+  headers,
   body: JSON.stringify(body),
 });
 
+/* ===========================================================
+   🧩 Handler
+=========================================================== */
 exports.handler = async (event) => {
-  console.log("🧾 REGISTER EVENT:", event);
-
-  const method = event.httpMethod;
+  console.log("🧾 REGISTER EVENT:", JSON.stringify(event, null, 2));
+  const method = event.httpMethod || "GET";
 
   /* ===========================================================
      🌐 Handle CORS Preflight
   =========================================================== */
   if (method === "OPTIONS") {
+    console.log("🟢 CORS preflight received");
     return {
       statusCode: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type,Authorization",
-        "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
-      },
-      body: JSON.stringify({ message: "CORS preflight success" }),
+      headers,
+      body: JSON.stringify({ success: true, message: "CORS preflight success" }),
     };
   }
 
@@ -92,8 +96,8 @@ exports.handler = async (event) => {
     const scanResult = await dynamodb
       .scan({
         TableName: TABLE_NAME,
-        ProjectionExpression: "#p",
-        ExpressionAttributeNames: { "#p": "profileName" }, // ✅ prevent reserved word issues
+        ProjectionExpression: "#pn",
+        ExpressionAttributeNames: { "#pn": "profileName" },
       })
       .promise();
 

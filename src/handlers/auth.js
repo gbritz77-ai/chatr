@@ -7,17 +7,31 @@ const dynamodb = new AWS.DynamoDB.DocumentClient();
 const TABLE_NAME = process.env.MEMBERS_TABLE;
 const JWT_SECRET = process.env.JWT_SECRET;
 
+const headers = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type,Authorization",
+  "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
+};
+
 const response = (statusCode, body) => ({
   statusCode,
-  headers: {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-  },
+  headers,
   body: JSON.stringify(body),
 });
 
 exports.handler = async (event) => {
   console.log("📩 AUTH EVENT:", JSON.stringify(event, null, 2));
+
+  // ✅ Handle CORS preflight OPTIONS requests
+  if (event.httpMethod === "OPTIONS") {
+    console.log("🟢 OPTIONS preflight request received");
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ success: true, message: "CORS preflight OK" }),
+    };
+  }
 
   try {
     const path = event.path?.toLowerCase() || "";
@@ -31,19 +45,17 @@ exports.handler = async (event) => {
     ============================================================ */
     if (method === "POST" && path.endsWith("/auth/register")) {
       const { username, password, profileName } = body;
-
       if (!username || !password || !profileName) {
         return response(400, {
           success: false,
-          message:
-            "Missing required fields (username, password, profileName)",
+          message: "Missing required fields (username, password, profileName)",
         });
       }
 
       const email = username.trim().toLowerCase();
       const normalizedName = profileName.trim();
 
-      // Check if user already exists by email
+      // Check existing user
       const existing = await dynamodb
         .get({ TableName: TABLE_NAME, Key: { userid: email } })
         .promise();
@@ -55,13 +67,12 @@ exports.handler = async (event) => {
         });
       }
 
-      // Check if profile name is already taken
+      // Check profile name
       const nameCheck = await dynamodb
         .scan({
           TableName: TABLE_NAME,
           FilterExpression: "profileName = :n",
           ExpressionAttributeValues: { ":n": normalizedName },
-          ProjectionExpression: "userid, profileName",
         })
         .promise();
 
@@ -84,15 +95,20 @@ exports.handler = async (event) => {
 
       await dynamodb.put({ TableName: TABLE_NAME, Item: newUser }).promise();
 
+      const token = jwt.sign(
+        { userid: email, profileName: normalizedName },
+        JWT_SECRET,
+        { expiresIn: "12h" }
+      );
+
       console.log("✅ User registered successfully:", email);
 
       return response(201, {
         success: true,
         message: "Registration successful",
-        user: {
-          userid: email,
-          profileName: newUser.profileName,
-        },
+        token,
+        userid: email,
+        profileName: normalizedName,
       });
     }
 
@@ -101,38 +117,23 @@ exports.handler = async (event) => {
     ============================================================ */
     if (method === "POST" && path.endsWith("/auth")) {
       const { username, password } = body;
-
-      if (!username || !password) {
-        return response(400, {
-          success: false,
-          message: "Missing credentials",
-        });
-      }
+      if (!username || !password)
+        return response(400, { success: false, message: "Missing credentials" });
 
       const email = username.trim().toLowerCase();
 
-      // Fetch user record
       const result = await dynamodb
         .get({ TableName: TABLE_NAME, Key: { userid: email } })
         .promise();
 
       const user = result.Item;
-      if (!user) {
-        return response(404, {
-          success: false,
-          message: "User not found",
-        });
-      }
+      if (!user)
+        return response(404, { success: false, message: "User not found" });
 
       const valid = await bcrypt.compare(password, user.password || "");
-      if (!valid) {
-        return response(401, {
-          success: false,
-          message: "Invalid password",
-        });
-      }
+      if (!valid)
+        return response(401, { success: false, message: "Invalid password" });
 
-      // Generate JWT token
       const token = jwt.sign(
         { userid: email, profileName: user.profileName },
         JWT_SECRET,
@@ -152,10 +153,7 @@ exports.handler = async (event) => {
     /* ============================================================
        ❌ Invalid path
     ============================================================ */
-    return response(404, {
-      success: false,
-      message: "Invalid path or method",
-    });
+    return response(404, { success: false, message: "Invalid path or method" });
   } catch (err) {
     console.error("💥 AUTH ERROR:", err);
     return response(500, {

@@ -43,7 +43,7 @@ export default function Login() {
           <img
             src="/logo/logo.JPG"
             alt="CHATR Logo"
-            className="w-48 h-20 object-cover mb-4"
+            className="w-48 h-25 object-cover mb-4"
           />
           <h1 className="text-2xl font-semibold text-gray-800">Welcome Back</h1>
           <p className="text-gray-500 text-sm">Sign in to your account</p>
