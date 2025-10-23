@@ -24,7 +24,6 @@ provider:
   stage: dev
 
   environment:
-    # ✅ Global env vars for all Lambdas
     JWT_SECRET: SuperSecretKey123!
     VITE_API_BASE: https://byu72oz79h.execute-api.eu-west-2.amazonaws.com/dev
     MEMBERS_TABLE: chatr-members
@@ -38,7 +37,6 @@ provider:
   iam:
     role:
       statements:
-        # ✅ DynamoDB access (all app tables)
         - Effect: Allow
           Action:
             - dynamodb:Scan
@@ -54,7 +52,6 @@ provider:
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-typing-status
 
-        # ✅ S3 access
         - Effect: Allow
           Action:
             - s3:PutObject
@@ -64,7 +61,6 @@ provider:
             - arn:aws:s3:::outsec-chat-bucket
             - arn:aws:s3:::outsec-chat-bucket/*
 
-        # ✅ CloudWatch logging (for all functions)
         - Effect: Allow
           Action:
             - logs:CreateLogGroup
@@ -76,7 +72,7 @@ provider:
 #                     FUNCTION DEFINITIONS
 # ============================================================
 functions:
-  # --- Auth ---
+  # --- Auth (Login) ---
   auth:
     handler: src/handlers/auth.handler
     events:
@@ -92,6 +88,8 @@ functions:
             methods:
               - OPTIONS
               - POST
+
+      # ✅ Explicit OPTIONS handler for preflight
       - http:
           path: auth
           method: options
@@ -113,7 +111,7 @@ functions:
     handler: src/handlers/register.handler
     events:
       - http:
-          path: register
+          path: auth/register
           method: post
           cors:
             origin: '*'
@@ -124,8 +122,10 @@ functions:
             methods:
               - OPTIONS
               - POST
+
+      # ✅ Explicit OPTIONS handler for preflight
       - http:
-          path: register
+          path: auth/register
           method: options
           integration: mock
           request:

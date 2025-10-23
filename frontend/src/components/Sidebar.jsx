@@ -128,11 +128,14 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   ========================================================= */
   return (
     <aside className="fixed top-0 left-0 bottom-0 w-[320px] bg-white border-r border-slate-200 flex flex-col z-20">
-      {/* Header */}
+      {/* Header with Logo */}
       <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold text-slate-800">CHATr</h1>
-          <p className="text-xs text-slate-500">Professional Messaging</p>
+        <div className="flex flex-col items-center justify-center w-full">
+          <img
+            src="/logo/logo.JPG"
+            alt="CHATr Logo"
+            className="w-40 h-auto object-contain rounded-lg shadow-sm border border-slate-200"
+          />
         </div>
         <button
           onClick={() => {
@@ -140,7 +143,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
             window.location.href = "/login";
           }}
           title="Logout"
-          className="text-slate-500 hover:text-red-600 transition"
+          className="absolute right-5 top-5 text-slate-500 hover:text-red-600 transition"
         >
           <LogOut size={18} />
         </button>
@@ -153,7 +156,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
           placeholder="🔍 Search..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+          className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-gray-400 outline-none"
         />
       </div>
 
@@ -167,7 +170,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
             </h2>
             <button
               onClick={() => setShowModal(true)}
-              className="text-xs bg-blue-600 text-white px-2 py-1 rounded-md hover:bg-blue-700"
+              className="text-xs bg-gray-800 text-white px-2 py-1 rounded-md hover:bg-gray-700"
             >
               + Create
             </button>
@@ -190,8 +193,8 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                     }}
                     className={`w-full text-left px-3 py-2 rounded-md flex items-center gap-3 transition ${
                       activeChat === `group-${g.groupid}`
-                        ? "bg-blue-50 text-blue-700"
-                        : "hover:bg-slate-100"
+                        ? "bg-gray-100 text-gray-900"
+                        : "hover:bg-gray-50"
                     }`}
                   >
                     <Avatar name={g.groupname} size={2.5} />
@@ -201,7 +204,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                           {g.groupname}
                         </span>
                         {unread > 0 && (
-                          <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">
+                          <span className="bg-gray-800 text-white text-xs px-2 py-0.5 rounded-full">
                             {unread}
                           </span>
                         )}
@@ -249,8 +252,8 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                     }}
                     className={`w-full text-left px-3 py-2 rounded-md flex items-center gap-3 transition ${
                       activeChat === `user-${m.userid}`
-                        ? "bg-blue-50 text-blue-700"
-                        : "hover:bg-slate-100"
+                        ? "bg-gray-100 text-gray-900"
+                        : "hover:bg-gray-50"
                     }`}
                   >
                     <Avatar
@@ -293,7 +296,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Group Creation Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg w-96 p-6">
@@ -329,7 +332,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
               </button>
               <button
                 onClick={handleCreateGroup}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700"
               >
                 Create
               </button>
