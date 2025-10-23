@@ -1,10 +1,13 @@
-import AWS from "aws-sdk";
+// src/handlers/members.js
+const AWS = require("aws-sdk");
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const TABLE_NAME = process.env.MEMBERS_TABLE || "chatr-members";
 
-export const handler = async () => {
+exports.handler = async () => {
   try {
+    console.log("🧩 Fetching members from table:", TABLE_NAME);
+
     const result = await dynamodb.scan({ TableName: TABLE_NAME }).promise();
 
     return {
@@ -23,7 +26,10 @@ export const handler = async () => {
     return {
       statusCode: 500,
       headers: { "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ success: false, message: "Failed to fetch members" }),
+      body: JSON.stringify({
+        success: false,
+        message: err.message || "Failed to fetch members",
+      }),
     };
   }
 };
