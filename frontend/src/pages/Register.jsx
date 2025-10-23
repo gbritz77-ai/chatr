@@ -52,7 +52,8 @@ export default function Register() {
     if (!username || !password || !confirmPassword || !profileName)
       return setError("Please fill in all required fields.");
 
-    const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+    const emailRegex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+
     if (!emailRegex.test(username))
       return setError("Please enter a valid email address.");
 
