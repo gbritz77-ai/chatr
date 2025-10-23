@@ -3,10 +3,10 @@ import { postJSON, getJSON } from "../lib/api";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
 import { Avatar } from "../components/Avatar";
-import { Send, Smile, Paperclip, Loader2 } from "lucide-react";
+import { Send, Smile, Paperclip, Loader2, FileText } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — Presigned Upload + Progress + Thumbnails
+   💬 ChatWindow — Presigned Upload + Attachment Display
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -25,6 +25,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const typingTimer = useRef(null);
 
   const currentProfileName = localStorage.getItem("profileName") || currentUser;
+  const S3_BUCKET_URL = "https://outsec-chat-bucket.s3.eu-west-2.amazonaws.com";
 
   /* ----------------------------------------------------
      LOAD MESSAGES
@@ -34,13 +35,9 @@ export default function ChatWindow({ activeUser, currentUser }) {
     try {
       let url = "";
       if (activeUser.type === "group") {
-        url = `/messages?groupid=${encodeURIComponent(
-          activeUser.id
-        )}&username=${encodeURIComponent(currentUser)}`;
+        url = `/messages?groupid=${encodeURIComponent(activeUser.id)}&username=${encodeURIComponent(currentUser)}`;
       } else if (activeUser.type === "user") {
-        url = `/messages?userA=${encodeURIComponent(
-          currentUser
-        )}&userB=${encodeURIComponent(activeUser.username)}`;
+        url = `/messages?userA=${encodeURIComponent(currentUser)}&userB=${encodeURIComponent(activeUser.username)}`;
       }
 
       const res = await getJSON(url);
@@ -119,19 +116,16 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }, [messages]);
 
   /* ----------------------------------------------------
-     PRESIGNED UPLOAD + DEBUG
+     PRESIGNED UPLOAD
   ---------------------------------------------------- */
   async function getPresignedUrl(file) {
     console.log("📦 Requesting presign for:", { name: file.name, type: file.type });
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_API_BASE}/files/presign`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: file.name, type: file.type }),
-        }
-      );
+      const res = await fetch(`${import.meta.env.VITE_API_BASE}/files/presign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, type: file.type }),
+      });
       const data = await res.json();
       console.log("📜 Presign response:", data);
       if (!data.success || !data.uploadURL) throw new Error("Presign failed");
@@ -143,53 +137,43 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   async function uploadToS3(file, presignedUrl) {
-  console.log("🧩 Upload start", { name: file.name, type: file.type, size: file.size });
-  console.log("🔗 Upload URL:", presignedUrl);
+    console.log("🧩 Upload start", { name: file.name, type: file.type, size: file.size });
+    setUploading(true);
+    setUploadProgress(0);
 
-  setUploading(true);
-  setUploadProgress(0);
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", presignedUrl, true);
+      xhr.setRequestHeader("Content-Type", file.type);
 
-  try {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", presignedUrl, true);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          setUploadProgress(percent);
+        }
+      };
 
-    // ✅ Only set Content-Type — never add x-amz-acl manually
-    xhr.setRequestHeader("Content-Type", file.type);
+      xhr.onload = () => {
+        console.log("📬 S3 response:", xhr.status, xhr.statusText);
+        setUploading(false);
+        if (xhr.status === 200) {
+          console.log("✅ Upload succeeded!");
+          resolve();
+        } else {
+          console.error("❌ Upload failed:", xhr.responseText || xhr.statusText);
+          reject(new Error(`S3 upload failed (${xhr.status})`));
+        }
+      };
 
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        const percent = Math.round((e.loaded / e.total) * 100);
-        setUploadProgress(percent);
-      }
-    };
+      xhr.onerror = (err) => {
+        setUploading(false);
+        console.error("🚨 Upload error:", err);
+        reject(err);
+      };
 
-    xhr.onload = () => {
-      console.log("📬 S3 response:", xhr.status, xhr.statusText);
-      setUploading(false);
-      setUploadProgress(100);
-
-      if (xhr.status === 200) {
-        console.log("✅ Upload succeeded!");
-      } else {
-        console.error("❌ Upload failed:", xhr.responseText || xhr.statusText);
-        alert(`S3 upload failed (${xhr.status}): ${xhr.responseText}`);
-      }
-    };
-
-    xhr.onerror = (err) => {
-      console.error("🚨 Network error during upload:", err);
-      setUploading(false);
-      alert("Upload network error: " + err.message);
-    };
-
-    xhr.send(file);
-  } catch (err) {
-    setUploading(false);
-    console.error("🚨 Upload error:", err);
-    alert("Upload failed: " + err.message);
+      xhr.send(file);
+    });
   }
-}
-
 
   /* ----------------------------------------------------
      SEND MESSAGE
@@ -199,19 +183,14 @@ export default function ChatWindow({ activeUser, currentUser }) {
     if ((!text.trim() && !attachment) || !activeUser) return;
 
     try {
-      let fileUrl = null;
       let fileKey = null;
       let fileType = null;
-
       if (attachment) {
         console.log("📎 Uploading attachment:", attachment.name);
         const presign = await getPresignedUrl(attachment);
         await uploadToS3(attachment, presign.uploadURL);
-
-        fileUrl = presign.publicUrl;
         fileKey = presign.fileKey;
         fileType = attachment.type;
-        console.log("✅ Uploaded file:", { fileUrl, fileKey, fileType });
       }
 
       const payload =
@@ -219,16 +198,14 @@ export default function ChatWindow({ activeUser, currentUser }) {
           ? {
               sender: currentUser,
               groupid: activeUser.id,
-              text: text || null,
-              attachmentUrl: fileUrl,
+              text: text || "",
               attachmentKey: fileKey,
               attachmentType: fileType,
             }
           : {
               sender: currentUser,
               recipient: activeUser.username,
-              text: text || null,
-              attachmentUrl: fileUrl,
+              text: text || "",
               attachmentKey: fileKey,
               attachmentType: fileType,
             };
@@ -257,10 +234,6 @@ export default function ChatWindow({ activeUser, currentUser }) {
   /* ----------------------------------------------------
      RENDER MESSAGES
   ---------------------------------------------------- */
-  function renderMessages() {
-    return messages.map((msg) => renderBubble(msg));
-  }
-
   function renderBubble(msg) {
     const isMine = msg.sender === currentUser;
     const senderName =
@@ -278,7 +251,11 @@ export default function ChatWindow({ activeUser, currentUser }) {
     const isOnline = onlineUsers[msg.sender];
     const isImage =
       msg.attachmentType?.startsWith("image/") ||
-      msg.attachmentUrl?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+      msg.attachmentKey?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+
+    const fileUrl = msg.attachmentKey
+      ? `${S3_BUCKET_URL}/${msg.attachmentKey}`
+      : null;
 
     return (
       <div
@@ -296,40 +273,39 @@ export default function ChatWindow({ activeUser, currentUser }) {
 
         <div
           className={`p-3 rounded-lg max-w-[70%] ${
-            isMine
-              ? "bg-blue-600 text-white ml-auto"
-              : "bg-white border text-slate-800"
+            isMine ? "bg-blue-600 text-white ml-auto" : "bg-white border text-slate-800"
           }`}
         >
           {!isMine && (
             <div className="text-xs font-semibold text-slate-500 mb-1">{senderName}</div>
           )}
+
           {msg.text && <div className="whitespace-pre-wrap break-words">{msg.text}</div>}
 
-          {isImage && msg.attachmentUrl && (
-            <a
-              href={msg.attachmentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block mt-2 rounded-lg overflow-hidden border border-slate-300 hover:opacity-90 transition"
-            >
-              <img
-                src={msg.attachmentUrl}
-                alt="attachment"
-                className="max-h-64 object-cover"
-              />
-            </a>
-          )}
-
-          {!isImage && msg.attachmentUrl && (
-            <a
-              href={msg.attachmentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block mt-2 underline text-blue-200 hover:text-blue-400"
-            >
-              📎 {msg.attachmentUrl.split("/").pop()}
-            </a>
+          {/* 📎 ATTACHMENT PREVIEW */}
+          {fileUrl && (
+            <div className="mt-2">
+              {isImage ? (
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block rounded-lg overflow-hidden border border-slate-300 hover:opacity-90 transition"
+                >
+                  <img src={fileUrl} alt="attachment" className="max-h-64 object-cover" />
+                </a>
+              ) : (
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-blue-100 hover:text-blue-300 underline"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>{msg.attachmentKey.split("/").pop()}</span>
+                </a>
+              )}
+            </div>
           )}
 
           <div className={`text-xs mt-2 ${isMine ? "text-blue-200" : "text-slate-500"}`}>
@@ -371,7 +347,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       <div className="flex-1 overflow-y-auto p-5 space-y-4 pb-[160px]">
         {activeUser ? (
           messages.length ? (
-            renderMessages()
+            messages.map(renderBubble)
           ) : (
             <p className="text-center text-slate-400 italic">No messages yet</p>
           )
@@ -383,7 +359,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Upload Progress Bar */}
+      {/* Upload Progress */}
       {uploading && (
         <div className="absolute bottom-[115px] left-0 w-full bg-slate-200 h-1">
           <div
@@ -393,7 +369,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
         </div>
       )}
 
-      {/* Floating Input Bar */}
+      {/* Input Bar */}
       {activeUser && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-xl border border-slate-200 rounded-full shadow-lg px-6 py-3 w-[90%] max-w-3xl transition">
           <form onSubmit={sendMessage} className="flex items-center gap-3">
@@ -424,11 +400,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
               className="p-2 rounded-full cursor-pointer text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition"
             >
               <Paperclip className="w-5 h-5" />
-              <input
-                type="file"
-                hidden
-                onChange={(e) => handleFileChange(e.target.files[0])}
-              />
+              <input type="file" hidden onChange={(e) => handleFileChange(e.target.files[0])} />
             </label>
 
             {attachment && (
@@ -450,9 +422,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
               type="submit"
               disabled={uploading}
               className={`p-3 rounded-full shadow-sm transition ${
-                uploading
-                  ? "bg-slate-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700 text-white"
+                uploading ? "bg-slate-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"
               }`}
             >
               {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}

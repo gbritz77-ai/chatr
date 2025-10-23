@@ -46,26 +46,47 @@ exports.handler = async (event) => {
 
   try {
     /* ===========================================================
-       📨 POST /messages  → Send message
+       📨 POST /messages  → Send message (text OR attachment)
     =========================================================== */
     if (method === "POST" && path.endsWith("/messages")) {
-      const { sender, recipient, text, groupid, attachmentKey, attachmentType } = body;
-      if (!sender || (!recipient && !groupid) || !text)
-        return response(400, { success: false, message: "Missing fields" });
+      const {
+        sender,
+        recipient,
+        text,
+        groupid,
+        attachmentKey,
+        attachmentType,
+      } = body;
 
+      // ✅ Validation: must have sender + target + (text or attachment)
+      if (!sender || (!recipient && !groupid))
+        return response(400, {
+          success: false,
+          message: "Missing sender or target",
+        });
+
+      if (!text && !attachmentKey)
+        return response(400, {
+          success: false,
+          message: "Missing text or attachment",
+        });
+
+      // ✅ Build message object
       const message = {
         messageid: crypto.randomUUID(),
         sender,
         recipient: recipient || null,
         groupid: groupid || null,
-        text,
+        text: text || "",
         attachmentKey: attachmentKey || null,
         attachmentType: attachmentType || null,
         read: false,
         timestamp: new Date().toISOString(),
       };
 
+      console.log("💾 Saving message:", message);
       await dynamodb.put({ TableName: TABLE_NAME, Item: message }).promise();
+
       return response(200, { success: true, data: message });
     }
 
@@ -107,7 +128,6 @@ exports.handler = async (event) => {
 
       messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-      // ✅ Attach senderProfileName
       for (const msg of messages) {
         msg.senderProfileName = await getProfileName(msg.sender);
       }
