@@ -124,50 +124,42 @@ export default function ChatWindow({ activeUser, currentUser }) {
   /* ----------------------------------------------------
      PRESIGNED UPLOAD WITH PROGRESS
   ---------------------------------------------------- */
-  async function uploadToS3(file) {
-    try {
-      setUploading(true);
-      setUploadProgress(0);
+  async function uploadToS3(file, presignedUrl) {
+  console.log("🧩 Upload start", { name: file.name, type: file.type, size: file.size });
+  console.log("🔗 Upload URL", presignedUrl);
 
-      // Step 1: Request a presigned URL from the backend
-      const res = await fetch(`${import.meta.env.VITE_API_BASE}/files/presign`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, type: file.type }),
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.message || "Failed to get presigned URL");
+  try {
+    const res = await fetch(presignedUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type,
+        "x-amz-acl": "public-read", // must match your presign
+      },
+      body: file,
+    });
 
-      const { uploadURL, fileKey, publicUrl } = data;
+    console.log("📡 PUT request headers sent:", {
+      "Content-Type": file.type,
+      "x-amz-acl": "public-read",
+    });
 
-      // Step 2: Upload directly to S3 with progress
-      await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("PUT", uploadURL, true);
-        xhr.setRequestHeader("Content-Type", file.type);
+    console.log("📬 S3 Response:", res.status, res.statusText);
 
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            const percent = Math.round((e.loaded / e.total) * 100);
-            setUploadProgress(percent);
-          }
-        };
-
-        xhr.onload = () => (xhr.status === 200 ? resolve() : reject(new Error("Upload failed")));
-        xhr.onerror = () => reject(new Error("Network error"));
-        xhr.send(file);
-      });
-
-      console.log("✅ Uploaded to S3:", publicUrl);
-      return { success: true, url: publicUrl, key: fileKey, type: file.type };
-    } catch (err) {
-      console.error("❌ Upload failed:", err);
-      return { success: false, message: err.message };
-    } finally {
-      setUploading(false);
-      setUploadProgress(0);
+    if (!res.ok) {
+      const text = await res.text();
+      console.error("❌ Upload failed: ", text);
+      throw new Error(`Upload failed: ${res.status} ${text}`);
     }
+
+    console.log("✅ Upload succeeded!");
+    return true;
+  } catch (err) {
+    console.error("🚨 Upload error:", err);
+    alert(`Upload failed: ${err.message}`);
+    return false;
   }
+}
+
 
   /* ----------------------------------------------------
      SEND MESSAGE
