@@ -23,9 +23,11 @@ provider:
   region: eu-west-2
   stage: dev
 
+  # ✅ LOCAL .env still loads via serverless-dotenv-plugin,
+  # but these are explicitly set for AWS deployment
   environment:
-    JWT_SECRET: ${env:JWT_SECRET}
-    VITE_API_BASE: ${env:VITE_API_BASE}
+    JWT_SECRET: SuperSecretKey123!
+    VITE_API_BASE: https://byu72oz79h.execute-api.eu-west-2.amazonaws.com/dev
     MEMBERS_TABLE: chatr-members
     MESSAGES_TABLE: chatr-messages
     GROUPS_TABLE: chatr-groups
@@ -99,7 +101,7 @@ functions:
           method: any
           cors: true
       - http:
-          path: messages/{proxy+}   # ✅ allows /messages/mark-read and /messages/unread-counts
+          path: messages/{proxy+}
           method: any
           cors: true
 
@@ -146,57 +148,44 @@ functions:
 # ============================================================
 #                      RESOURCE DEFINITIONS
 # ============================================================
-resources:
-  Resources:
-    ChatMembersTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: chatr-members
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: userid
-            AttributeType: S
-        KeySchema:
-          - AttributeName: userid
-            KeyType: HASH
+#resources:
+#  Resources:
+#    ChatMessagesTable:
+#      Type: AWS::DynamoDB::Table
+#      Properties:
+#        TableName: chatr-messages
+#        BillingMode: PAY_PER_REQUEST
+#        AttributeDefinitions:
+#          - AttributeName: messageid
+#            AttributeType: S
+#        KeySchema:
+#          - AttributeName: messageid
+#            KeyType: HASH
 
-    ChatMessagesTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: chatr-messages
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: messageid
-            AttributeType: S
-        KeySchema:
-          - AttributeName: messageid
-            KeyType: HASH
+#    ChatGroupsTable:
+#      Type: AWS::DynamoDB::Table
+#      Properties:
+#        TableName: chatr-groups
+#        BillingMode: PAY_PER_REQUEST
+#        AttributeDefinitions:
+#          - AttributeName: groupid
+#            AttributeType: S
+#        KeySchema:
+#          - AttributeName: groupid
+#            KeyType: HASH#
 
-    ChatGroupsTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: chatr-groups
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: groupid
-            AttributeType: S
-        KeySchema:
-          - AttributeName: groupid
-            KeyType: HASH
-
-    # ✅ NEW TABLE: Read tracking for unread messages
-    ChatReadTrackingTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: chatr-read-tracking
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: chatid
-            AttributeType: S
-          - AttributeName: username
-            AttributeType: S
-        KeySchema:
-          - AttributeName: chatid
-            KeyType: HASH
-          - AttributeName: username
-            KeyType: RANGE
+#    ChatReadTrackingTable:
+#      Type: AWS::DynamoDB::Table
+#      Properties:
+#        TableName: chatr-read-tracking
+#        BillingMode: PAY_PER_REQUEST
+#        AttributeDefinitions:
+#          - AttributeName: chatid
+#            AttributeType: S
+#          - AttributeName: username
+#            AttributeType: S
+#        KeySchema:
+#          - AttributeName: chatid
+#            KeyType: HASH
+#          - AttributeName: username
+#            KeyType: RANGE
