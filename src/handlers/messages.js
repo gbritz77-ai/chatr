@@ -58,7 +58,6 @@ exports.handler = async (event) => {
         attachmentType,
       } = body;
 
-      // ✅ Validation: must have sender + target + (text or attachment)
       if (!sender || (!recipient && !groupid))
         return response(400, {
           success: false,
@@ -71,7 +70,6 @@ exports.handler = async (event) => {
           message: "Missing text or attachment",
         });
 
-      // ✅ Build message object
       const message = {
         messageid: crypto.randomUUID(),
         sender,
@@ -92,11 +90,9 @@ exports.handler = async (event) => {
 
     /* ===========================================================
        💬 GET /messages?userA=&userB=
-       Returns conversation between 2 users (includes profile names)
     =========================================================== */
     if (method === "GET" && params.userA && params.userB) {
       const { userA, userB } = params;
-
       const result = await dynamodb.scan({ TableName: TABLE_NAME }).promise();
       const messages =
         result.Items?.filter(
@@ -107,7 +103,6 @@ exports.handler = async (event) => {
 
       messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-      // ✅ Attach senderProfileName
       for (const msg of messages) {
         msg.senderProfileName = await getProfileName(msg.sender);
       }
@@ -117,11 +112,9 @@ exports.handler = async (event) => {
 
     /* ===========================================================
        👥 GET /messages?groupid=
-       Returns group chat messages (includes profile names)
     =========================================================== */
     if (method === "GET" && params.groupid) {
       const { groupid } = params;
-
       const result = await dynamodb.scan({ TableName: TABLE_NAME }).promise();
       const messages =
         result.Items?.filter((m) => m.groupid === groupid) || [];
@@ -152,23 +145,23 @@ exports.handler = async (event) => {
     }
 
     /* ===========================================================
-       ✅ POST /messages/mark-read
+       ✅ POST /messages/mark-read  (Fixed for chatId + username)
     =========================================================== */
     if (method === "POST" && path.endsWith("/messages/mark-read")) {
-      const { username, chatWith } = body;
-      if (!username || !chatWith)
+      const { username, chatId } = body;
+      if (!username || !chatId)
         return response(400, {
           success: false,
-          message: "username and chatWith required",
+          message: "username and chatId required",
         });
 
       const result = await dynamodb.scan({ TableName: TABLE_NAME }).promise();
       const unreadMessages =
         result.Items?.filter(
           (m) =>
-            m.recipient === username &&
-            m.sender === chatWith &&
-            m.read === false
+            !m.read &&
+            ((m.recipient === username && chatId.includes(m.sender)) ||
+              (m.groupid && chatId.includes(m.groupid)))
         ) || [];
 
       for (const msg of unreadMessages) {

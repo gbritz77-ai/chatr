@@ -44,26 +44,32 @@ module.exports.handler = async (event) => {
       type = mimeMap[ext] || "application/octet-stream";
     }
 
+    // 🧩 Generate a unique file key
     const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const uniqueId = crypto.randomBytes(8).toString("hex");
     const fileKey = `attachments/${Date.now()}-${uniqueId}-${safeName}`;
 
-    // 🚫 DO NOT include ACL here — it breaks on ACL-disabled buckets
+    // ✅ Allow public access to uploaded file
     const params = {
       Bucket: BUCKET,
       Key: fileKey,
       ContentType: type,
       Expires: 300, // 5 minutes
+      ACL: "public-read", // 👈 crucial fix
     };
 
     console.log("🧾 PRESIGN PARAMS:", params);
 
     // Generate presigned PUT URL
     const uploadURL = await s3.getSignedUrlPromise("putObject", params);
+
     const region = process.env.AWS_REGION || "eu-west-2";
     const publicUrl = `https://${BUCKET}.s3.${region}.amazonaws.com/${fileKey}`;
 
-    console.log("✅ Generated presigned URL:", uploadURL);
+    console.log("✅ Generated presigned URL and public URL:", {
+      uploadURL,
+      publicUrl,
+    });
 
     return response(200, {
       success: true,
