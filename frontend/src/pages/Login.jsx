@@ -1,151 +1,104 @@
+// frontend/src/pages/Login.jsx
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { postJSON, getJSON } from "../lib/api";
-import { Eye, EyeOff, LogIn } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import logo from "/logo/logo.JPG"; // ✅ Correct logo path
+import { postJSON } from "../lib/api";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
-  const [success, setSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({ username: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  /* ============================================================
-     🔑 Handle Login
-  ============================================================ */
-  const handleLogin = async (e) => {
+  const handleChange = (e) =>
+    setForm({ ...form, [e.target.name]: e.target.value });
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage("");
+    setError("");
     setLoading(true);
 
     try {
-      const res = await postJSON("/auth", { username, password });
-
-      if (res?.token) {
-        // ✅ Store token + username
+      const res = await postJSON("/auth", form);
+      if (res?.success && res?.token) {
         localStorage.setItem("token", res.token);
-        localStorage.setItem("username", username);
-
-        // ✅ Fetch profile name automatically
-        const membersRes = await getJSON("/members");
-        const member = membersRes?.members?.find(
-          (m) => m.userid?.toLowerCase() === username.toLowerCase()
-        );
-        if (member?.profileName)
-          localStorage.setItem("profileName", member.profileName);
-
-        setSuccess(true);
-        setMessage("Login successful!");
-
-        // Redirect after short delay
-        setTimeout(() => navigate("/messages", { replace: true }), 1000);
+        localStorage.setItem("username", form.username);
+        navigate("/messages");
       } else {
-        setMessage("Invalid username or password");
-        setSuccess(false);
+        setError(res?.message || "Login failed. Please check credentials.");
       }
     } catch (err) {
-      console.error("Login error:", err);
-      setMessage("Login failed. Please try again.");
-      setSuccess(false);
+      setError("Server error. Please try again later.");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ============================================================
-     🖼️ UI
-  ============================================================ */
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-slate-100">
-      <div className="bg-white shadow-lg rounded-xl p-8 w-full max-w-md border border-slate-200">
-        {/* Header */}
-        <div className="flex flex-col items-center space-y-2 mb-6">
-          <div className="bg-blue-600 p-3 rounded-full text-white">
-            <LogIn className="w-6 h-6" />
-          </div>
-          <h1 className="text-2xl font-semibold text-slate-700">Welcome Back</h1>
-          <p className="text-sm text-slate-500">Sign in to ChatConnect</p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 text-white">
+      <div className="bg-slate-800/80 backdrop-blur-md border border-slate-700 rounded-2xl shadow-2xl p-10 w-full max-w-md">
+        {/* Logo + Title */}
+        <div className="flex flex-col items-center mb-6">
+          <img
+            src={logo}
+            alt="CHATR Logo"
+            className="w-28 h-28 rounded-full shadow-lg border border-slate-600 mb-3"
+          />
+          <h1 className="text-3xl font-bold text-white">CHATR</h1>
+          <p className="text-slate-400 text-sm">Stay connected. Instantly.</p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleLogin} className="space-y-4">
+        {/* Login Form */}
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-slate-600 mb-1">
+            <label className="block text-sm text-slate-300 mb-1">
               Email Address
             </label>
             <input
               type="email"
+              name="username"
               placeholder="you@example.com"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={form.username}
+              onChange={handleChange}
               required
-              autoComplete="username"
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg 
-                         focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50 text-sm"
+              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
 
           <div className="relative">
-            <label className="block text-sm font-medium text-slate-600 mb-1">
+            <label className="block text-sm text-slate-300 mb-1">
               Password
             </label>
             <input
               type={showPassword ? "text" : "password"}
+              name="password"
               placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              value={form.password}
+              onChange={handleChange}
               required
-              autoComplete="current-password"
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg 
-                         focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50 text-sm"
+              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white focus:ring-2 focus:ring-blue-500 outline-none"
             />
             <button
               type="button"
-              onClick={() => setShowPassword((p) => !p)}
-              className="absolute right-3 top-[34px] text-slate-500 hover:text-slate-700"
-              title={showPassword ? "Hide password" : "Show password"}
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-9 text-slate-400 hover:text-white"
             >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
+
+          {error && <p className="text-red-400 text-sm">{error}</p>}
 
           <button
             type="submit"
             disabled={loading}
-            className={`w-full py-2.5 font-semibold rounded-lg transition text-white ${
-              loading
-                ? "bg-blue-400 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700"
-            }`}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition disabled:opacity-50"
           >
             {loading ? "Logging in..." : "Login"}
           </button>
         </form>
-
-        {/* Message */}
-        {message && (
-          <div
-            className={`mt-4 text-sm text-center font-medium ${
-              success ? "text-green-600" : "text-red-600"
-            }`}
-          >
-            {success ? "✅ " : "❌ "}
-            {message}
-          </div>
-        )}
-
-        {/* Footer */}
-        <p className="mt-4 text-center text-sm text-slate-500">
-          Don’t have an account?{" "}
-          <Link
-            to="/register"
-            className="text-blue-600 font-medium hover:underline"
-          >
-            Register
-          </Link>
-        </p>
       </div>
     </div>
   );

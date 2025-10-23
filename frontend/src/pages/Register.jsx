@@ -3,7 +3,9 @@ import { useState } from "react";
 import { postJSON, getJSON } from "../lib/api";
 import { Eye, EyeOff } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import logo from "/logo/logo.JPG"; // ✅ CHATR logo
+<img src="/logo/logo.JPG" alt="CHATR Logo" />
+
+
 
 export default function Register() {
   const [username, setUsername] = useState("");
@@ -93,7 +95,7 @@ export default function Register() {
         {/* Logo + Title */}
         <div className="flex flex-col items-center mb-6">
           <img
-            src={logo}
+            src="/logo/logo.JPG"  // ✅ Correct path for Amplify & Vite
             alt="CHATR Logo"
             className="w-28 h-28 rounded-full shadow-lg border border-slate-600 mb-3"
           />
