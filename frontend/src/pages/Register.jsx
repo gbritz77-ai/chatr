@@ -1,11 +1,8 @@
-// frontend/src/pages/Register.jsx
+// src/pages/Register.jsx
 import { useState } from "react";
 import { postJSON, getJSON } from "../lib/api";
 import { Eye, EyeOff } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-<img src="/logo/logo.JPG" alt="CHATR Logo" />
-
-
 
 export default function Register() {
   const [username, setUsername] = useState("");
@@ -91,17 +88,19 @@ export default function Register() {
      🖼️ UI
   ------------------------------------------------------- */
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 text-white">
-      <div className="bg-slate-800/80 backdrop-blur-md border border-slate-700 rounded-2xl shadow-2xl p-10 w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="bg-white border border-gray-200 shadow-xl rounded-xl p-10 w-full max-w-md">
         {/* Logo + Title */}
         <div className="flex flex-col items-center mb-6">
           <img
-            src="/logo/logo.JPG"  // ✅ Correct path for Amplify & Vite
+            src="/logo/logo.JPG"
             alt="CHATR Logo"
-            className="w-60 h-24 rounded-lg shadow-lg border border-slate-600 mb-3"
+            className="w-48 h-20 object-cover mb-4"
           />
-      
-          <p className="text-slate-400 text-sm">Create your account</p>
+          <h1 className="text-2xl font-semibold text-gray-800">
+            Create an Account
+          </h1>
+          <p className="text-gray-500 text-sm">Join the conversation</p>
         </div>
 
         {error && (
@@ -113,12 +112,12 @@ export default function Register() {
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Email */}
           <div>
-            <label className="block text-sm text-slate-300 mb-1">
+            <label className="block text-sm text-gray-700 mb-1">
               Email Address
             </label>
             <input
               type="email"
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-gray-800 focus:ring-2 focus:ring-gray-400 outline-none"
               placeholder="you@example.com"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -128,12 +127,12 @@ export default function Register() {
 
           {/* Profile Name */}
           <div>
-            <label className="block text-sm text-slate-300 mb-1">
+            <label className="block text-sm text-gray-700 mb-1">
               Profile Name
             </label>
             <input
               type="text"
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-gray-800 focus:ring-2 focus:ring-gray-400 outline-none"
               placeholder="e.g. Gerhard Britz"
               value={profileName}
               onChange={(e) => {
@@ -143,22 +142,20 @@ export default function Register() {
               required
             />
             {checkingName ? (
-              <p className="text-xs text-slate-400 mt-1">Checking...</p>
+              <p className="text-xs text-gray-500 mt-1">Checking...</p>
             ) : nameAvailable === false ? (
-              <p className="text-xs text-red-400 mt-1">Name already taken</p>
+              <p className="text-xs text-red-500 mt-1">Name already taken</p>
             ) : nameAvailable === true ? (
-              <p className="text-xs text-emerald-400 mt-1">Name available ✓</p>
+              <p className="text-xs text-emerald-600 mt-1">Name available ✓</p>
             ) : null}
           </div>
 
           {/* Password */}
           <div className="relative">
-            <label className="block text-sm text-slate-300 mb-1">
-              Password
-            </label>
+            <label className="block text-sm text-gray-700 mb-1">Password</label>
             <input
               type={showPassword ? "text" : "password"}
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-gray-800 focus:ring-2 focus:ring-gray-400 outline-none"
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -167,7 +164,7 @@ export default function Register() {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-9 text-slate-400 hover:text-white"
+              className="absolute right-3 top-9 text-gray-400 hover:text-gray-600"
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -175,12 +172,12 @@ export default function Register() {
 
           {/* Confirm Password */}
           <div className="relative">
-            <label className="block text-sm text-slate-300 mb-1">
+            <label className="block text-sm text-gray-700 mb-1">
               Confirm Password
             </label>
             <input
               type={showConfirmPassword ? "text" : "password"}
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-gray-800 focus:ring-2 focus:ring-gray-400 outline-none"
               placeholder="••••••••"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -189,7 +186,7 @@ export default function Register() {
             <button
               type="button"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute right-3 top-9 text-slate-400 hover:text-white"
+              className="absolute right-3 top-9 text-gray-400 hover:text-gray-600"
             >
               {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -199,16 +196,16 @@ export default function Register() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition disabled:opacity-50"
+            className="w-full bg-gray-800 hover:bg-gray-900 text-white font-semibold py-2 rounded-lg transition disabled:opacity-50"
           >
             {loading ? "Creating Account..." : "Register"}
           </button>
         </form>
 
         {/* Footer Link */}
-        <p className="text-sm text-center text-slate-400 mt-5">
+        <p className="text-sm text-center text-gray-600 mt-5">
           Already have an account?{" "}
-          <Link to="/login" className="text-blue-400 hover:underline">
+          <Link to="/login" className="text-gray-900 font-medium hover:underline">
             Login
           </Link>
         </p>
