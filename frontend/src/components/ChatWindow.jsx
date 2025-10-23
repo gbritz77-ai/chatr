@@ -292,13 +292,17 @@ export default function ChatWindow({ activeUser, currentUser }) {
           {fileUrl && (
             <div className="mt-2">
               {isGif ? (
-                // 🔁 Animated GIF inline autoplay
-                <img
-                  src={`${fileUrl}?${Date.now()}`}
-                  alt="animated gif"
+                <video
+                  key={`${msg.messageid}-${Date.now()}`} // 🔁 Force re-render on reload
+                  src={`${fileUrl}?t=${Date.now()}`}     // ⏱️ Bypass cache
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
                   className="max-h-64 rounded-lg border border-slate-300 object-contain"
                 />
               ) : isImage ? (
+
                 <a
                   href={fileUrl}
                   target="_blank"
