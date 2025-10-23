@@ -239,99 +239,115 @@ export default function ChatWindow({ activeUser, currentUser }) {
      RENDER MESSAGES
   ---------------------------------------------------- */
   function renderBubble(msg) {
-    const isMine = msg.sender === currentUser;
-    const senderName =
-      msg.sender === currentUser
-        ? currentProfileName
-        : msg.senderProfileName || msg.sender || "Unknown";
+  const isMine = msg.sender === currentUser;
+  const senderName =
+    msg.sender === currentUser
+      ? currentProfileName
+      : msg.senderProfileName || msg.sender || "Unknown";
 
-    const time = new Date(msg.timestamp).toLocaleString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      day: "2-digit",
-      month: "short",
-    });
+  const time = new Date(msg.timestamp).toLocaleString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    day: "2-digit",
+    month: "short",
+  });
 
-    const isOnline = onlineUsers[msg.sender];
-    const isImage =
-      msg.attachmentType?.startsWith("image/") ||
-      msg.attachmentKey?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+  const isOnline = onlineUsers[msg.sender];
+  const isImage =
+    msg.attachmentType?.startsWith("image/") ||
+    msg.attachmentKey?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
 
-    const fileUrl = msg.attachmentKey
-      ? `${S3_BUCKET_URL}/${msg.attachmentKey}`
-      : null;
+  const fileUrl = msg.attachmentKey
+    ? `${S3_BUCKET_URL}/${msg.attachmentKey}`
+    : null;
 
-    const isGif = msg.attachmentType === "image/gif";
+  // 🎞️ Detect animated GIFs
+  const isGif =
+    msg.attachmentType === "image/gif" ||
+    msg.attachmentKey?.toLowerCase().endsWith(".gif");
 
-    return (
+  return (
+    <div
+      key={msg.messageid || `${msg.sender}-${msg.timestamp}`}
+      className={`flex items-end gap-2 ${
+        isMine ? "flex-row-reverse text-right" : "flex-row text-left"
+      }`}
+    >
+      <div className="relative">
+        <Avatar seed={senderName} username={senderName} size={10} style="micah" />
+        {isOnline && (
+          <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
+        )}
+      </div>
+
       <div
-        key={msg.messageid || `${msg.sender}-${msg.timestamp}`}
-        className={`flex items-end gap-2 ${
-          isMine ? "flex-row-reverse text-right" : "flex-row text-left"
+        className={`p-3 rounded-lg max-w-[70%] ${
+          isMine
+            ? "bg-blue-600 text-white ml-auto"
+            : "bg-white border text-slate-800"
         }`}
       >
-        <div className="relative">
-          <Avatar seed={senderName} username={senderName} size={10} style="micah" />
-          {isOnline && (
-            <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
-          )}
-        </div>
+        {!isMine && (
+          <div className="text-xs font-semibold text-slate-500 mb-1">
+            {senderName}
+          </div>
+        )}
+
+        {msg.text && (
+          <div className="whitespace-pre-wrap break-words">{msg.text}</div>
+        )}
+
+        {/* 📎 ATTACHMENT PREVIEW */}
+        {fileUrl && (
+          <div className="mt-2">
+            {isGif ? (
+              // 🌀 Render animated GIF as <img>, not <video>
+              <img
+                src={fileUrl}
+                alt="animated gif"
+                className="max-h-64 rounded-lg border border-slate-300 object-contain"
+                loading="lazy"
+              />
+            ) : isImage ? (
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block rounded-lg overflow-hidden border border-slate-300 hover:opacity-90 transition"
+              >
+                <img
+                  src={fileUrl}
+                  alt="attachment"
+                  className="max-h-64 object-cover"
+                  loading="lazy"
+                />
+              </a>
+            ) : (
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-blue-100 hover:text-blue-300 underline"
+              >
+                <FileText className="w-4 h-4" />
+                <span>{msg.attachmentKey.split("/").pop()}</span>
+              </a>
+            )}
+          </div>
+        )}
 
         <div
-          className={`p-3 rounded-lg max-w-[70%] ${
-            isMine ? "bg-blue-600 text-white ml-auto" : "bg-white border text-slate-800"
+          className={`text-xs mt-2 ${
+            isMine ? "text-blue-200" : "text-slate-500"
           }`}
         >
-          {!isMine && (
-            <div className="text-xs font-semibold text-slate-500 mb-1">{senderName}</div>
-          )}
-
-          {msg.text && <div className="whitespace-pre-wrap break-words">{msg.text}</div>}
-
-          {/* 📎 ATTACHMENT PREVIEW */}
-          {fileUrl && (
-            <div className="mt-2">
-              {isGif ? (
-                <video
-                  key={`${msg.messageid}-${Date.now()}`} // 🔁 Force re-render on reload
-                  src={`${fileUrl}?t=${Date.now()}`}     // ⏱️ Bypass cache
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  className="max-h-64 rounded-lg border border-slate-300 object-contain"
-                />
-              ) : isImage ? (
-
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block rounded-lg overflow-hidden border border-slate-300 hover:opacity-90 transition"
-                >
-                  <img src={fileUrl} alt="attachment" className="max-h-64 object-cover" />
-                </a>
-              ) : (
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-blue-100 hover:text-blue-300 underline"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>{msg.attachmentKey.split("/").pop()}</span>
-                </a>
-              )}
-            </div>
-          )}
-
-          <div className={`text-xs mt-2 ${isMine ? "text-blue-200" : "text-slate-500"}`}>
-            {time}
-          </div>
+          {time}
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
+
 
   /* ----------------------------------------------------
      RETURN LAYOUT

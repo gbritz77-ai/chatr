@@ -24,9 +24,10 @@ module.exports.handler = async (event) => {
     const body = typeof event.body === "string" ? JSON.parse(event.body) : {};
     let { name, type } = body;
 
-    if (!name) return response(400, { success: false, message: "Missing file name" });
+    if (!name)
+      return response(400, { success: false, message: "Missing file name" });
 
-    // 🧠 If frontend didn't provide type, infer from extension
+    // 🧠 Infer MIME type if frontend didn’t provide one
     if (!type) {
       const ext = name.split(".").pop().toLowerCase();
       const mimeMap = {
@@ -37,6 +38,8 @@ module.exports.handler = async (event) => {
         webp: "image/webp",
         pdf: "application/pdf",
         txt: "text/plain",
+        mp4: "video/mp4",
+        webm: "video/webm",
       };
       type = mimeMap[ext] || "application/octet-stream";
     }
@@ -45,19 +48,22 @@ module.exports.handler = async (event) => {
     const uniqueId = crypto.randomBytes(8).toString("hex");
     const fileKey = `attachments/${Date.now()}-${uniqueId}-${safeName}`;
 
+    // 🚫 DO NOT include ACL here — it breaks on ACL-disabled buckets
     const params = {
       Bucket: BUCKET,
       Key: fileKey,
-      ContentType: type, // ✅ Ensures S3 stores the correct MIME type
-      Expires: 300,
-      ACL: "public-read", // ✅ Needed for public image access
+      ContentType: type,
+      Expires: 300, // 5 minutes
     };
 
     console.log("🧾 PRESIGN PARAMS:", params);
 
+    // Generate presigned PUT URL
     const uploadURL = await s3.getSignedUrlPromise("putObject", params);
     const region = process.env.AWS_REGION || "eu-west-2";
     const publicUrl = `https://${BUCKET}.s3.${region}.amazonaws.com/${fileKey}`;
+
+    console.log("✅ Generated presigned URL:", uploadURL);
 
     return response(200, {
       success: true,
