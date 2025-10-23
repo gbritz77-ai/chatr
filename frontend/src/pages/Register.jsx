@@ -98,7 +98,7 @@ export default function Register() {
           <img
             src="/logo/logo.JPG"  // ✅ Correct path for Amplify & Vite
             alt="CHATR Logo"
-            className="w-40 h-24 rounded-lg shadow-lg border border-slate-600 mb-3"
+            className="w-60 h-24 rounded-lg shadow-lg border border-slate-600 mb-3"
           />
       
           <p className="text-slate-400 text-sm">Create your account</p>

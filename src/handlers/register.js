@@ -21,6 +21,23 @@ const response = (statusCode, body) => ({
 exports.handler = async (event) => {
   console.log("🧾 REGISTER EVENT:", event);
 
+  const method = event.httpMethod;
+
+  /* ===========================================================
+     🌐 Handle CORS Preflight
+  =========================================================== */
+  if (method === "OPTIONS") {
+    return {
+      statusCode: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type,Authorization",
+        "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
+      },
+      body: JSON.stringify({ message: "CORS preflight success" }),
+    };
+  }
+
   try {
     const body = JSON.parse(event.body || "{}");
     const { username, password, confirmPassword, profileName } = body;
@@ -35,7 +52,7 @@ exports.handler = async (event) => {
       });
     }
 
-    // Email validation
+    // ✅ Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(username)) {
       return response(400, {
@@ -44,7 +61,7 @@ exports.handler = async (event) => {
       });
     }
 
-    // Password confirmation
+    // ✅ Password confirmation
     if (password !== confirmPassword) {
       return response(400, {
         success: false,
@@ -75,7 +92,8 @@ exports.handler = async (event) => {
     const scanResult = await dynamodb
       .scan({
         TableName: TABLE_NAME,
-        ProjectionExpression: "profileName",
+        ProjectionExpression: "#p",
+        ExpressionAttributeNames: { "#p": "profileName" }, // ✅ prevent reserved word issues
       })
       .promise();
 
