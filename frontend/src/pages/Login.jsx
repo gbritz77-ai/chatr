@@ -1,7 +1,5 @@
-// frontend/src/pages/Login.jsx
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import logo from "/logo/logo.JPG"; // ✅ Correct logo path
+import { useNavigate, Link } from "react-router-dom";
 import { postJSON } from "../lib/api";
 import { Eye, EyeOff } from "lucide-react";
 
@@ -42,11 +40,11 @@ export default function Login() {
         {/* Logo + Title */}
         <div className="flex flex-col items-center mb-6">
           <img
-            src={logo}
+            src="/logo/logo.JPG" // ✅ Correct public path
             alt="CHATR Logo"
-            className="w-28 h-28 rounded-full shadow-lg border border-slate-600 mb-3"
+            className="w-28 h-28 rounded-lg shadow-lg border border-slate-600 mb-3"
           />
-          <h1 className="text-3xl font-bold text-white">CHATR</h1>
+         
           <p className="text-slate-400 text-sm">Stay connected. Instantly.</p>
         </div>
 
@@ -89,7 +87,9 @@ export default function Login() {
             </button>
           </div>
 
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+          {error && (
+            <p className="text-red-400 text-sm text-center">{error}</p>
+          )}
 
           <button
             type="submit"
@@ -99,6 +99,17 @@ export default function Login() {
             {loading ? "Logging in..." : "Login"}
           </button>
         </form>
+
+        {/* Register Link Footer */}
+        <p className="text-sm text-center text-slate-400 mt-5">
+          Don’t have an account?{" "}
+          <Link
+            to="/register"
+            className="text-blue-400 hover:text-blue-300 font-semibold hover:underline"
+          >
+            Create one
+          </Link>
+        </p>
       </div>
     </div>
   );
