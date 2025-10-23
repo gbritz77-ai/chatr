@@ -143,42 +143,53 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   async function uploadToS3(file, presignedUrl) {
-    console.log("🧩 Upload start", { name: file.name, type: file.type, size: file.size });
-    console.log("🔗 Upload URL", presignedUrl);
+  console.log("🧩 Upload start", { name: file.name, type: file.type, size: file.size });
+  console.log("🔗 Upload URL:", presignedUrl);
 
-    setUploading(true);
-    setUploadProgress(0);
+  setUploading(true);
+  setUploadProgress(0);
 
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", presignedUrl);
-      xhr.setRequestHeader("Content-Type", file.type);
-      xhr.setRequestHeader("x-amz-acl", "public-read");
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", presignedUrl, true);
 
-      xhr.upload.addEventListener("progress", (e) => {
-        if (e.lengthComputable) {
-          const percent = Math.round((e.loaded / e.total) * 100);
-          setUploadProgress(percent);
-        }
-      });
+    // ✅ Only set Content-Type — never add x-amz-acl manually
+    xhr.setRequestHeader("Content-Type", file.type);
 
-      xhr.onload = () => {
-        console.log("📬 S3 upload response:", xhr.status, xhr.statusText);
-        setUploading(false);
-        setUploadProgress(100);
-        if (xhr.status === 200) resolve(true);
-        else reject(new Error(`Upload failed: ${xhr.status}`));
-      };
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const percent = Math.round((e.loaded / e.total) * 100);
+        setUploadProgress(percent);
+      }
+    };
 
-      xhr.onerror = (err) => {
-        console.error("🚨 Upload network error:", err);
-        setUploading(false);
-        reject(err);
-      };
+    xhr.onload = () => {
+      console.log("📬 S3 response:", xhr.status, xhr.statusText);
+      setUploading(false);
+      setUploadProgress(100);
 
-      xhr.send(file);
-    });
+      if (xhr.status === 200) {
+        console.log("✅ Upload succeeded!");
+      } else {
+        console.error("❌ Upload failed:", xhr.responseText || xhr.statusText);
+        alert(`S3 upload failed (${xhr.status}): ${xhr.responseText}`);
+      }
+    };
+
+    xhr.onerror = (err) => {
+      console.error("🚨 Network error during upload:", err);
+      setUploading(false);
+      alert("Upload network error: " + err.message);
+    };
+
+    xhr.send(file);
+  } catch (err) {
+    setUploading(false);
+    console.error("🚨 Upload error:", err);
+    alert("Upload failed: " + err.message);
   }
+}
+
 
   /* ----------------------------------------------------
      SEND MESSAGE
