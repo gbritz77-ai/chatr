@@ -6,7 +6,7 @@ import { Avatar } from "../components/Avatar";
 import { Send, Smile, Paperclip, Loader2, FileText } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — Presigned Upload + Attachment Display + GIF Fix
+   💬 ChatWindow — Signed URL Upload + Secure Attachment Display
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -120,7 +120,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }, [messages]);
 
   /* ----------------------------------------------------
-     PRESIGNED UPLOAD
+     PRESIGNED UPLOAD (Signed GET URLs)
   ---------------------------------------------------- */
   async function getPresignedUrl(file) {
     console.log("📦 Requesting presign for:", { name: file.name, type: file.type });
@@ -158,7 +158,6 @@ export default function ChatWindow({ activeUser, currentUser }) {
       };
 
       xhr.onload = () => {
-        console.log("📬 S3 response:", xhr.status, xhr.statusText);
         setUploading(false);
         if (xhr.status === 200) {
           console.log("✅ Upload succeeded!");
@@ -189,12 +188,15 @@ export default function ChatWindow({ activeUser, currentUser }) {
     try {
       let fileKey = null;
       let fileType = null;
+      let viewURL = null;
+
       if (attachment) {
         console.log("📎 Uploading attachment:", attachment.name);
         const presign = await getPresignedUrl(attachment);
         await uploadToS3(attachment, presign.uploadURL);
         fileKey = presign.fileKey;
         fileType = attachment.type;
+        viewURL = presign.viewURL; // <-- Signed GET URL
       }
 
       const payload =
@@ -205,6 +207,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
               text: text || "",
               attachmentKey: fileKey,
               attachmentType: fileType,
+              viewURL,
             }
           : {
               sender: currentUser,
@@ -212,6 +215,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
               text: text || "",
               attachmentKey: fileKey,
               attachmentType: fileType,
+              viewURL,
             };
 
       console.log("📤 Sending message payload:", payload);
@@ -239,115 +243,115 @@ export default function ChatWindow({ activeUser, currentUser }) {
      RENDER MESSAGES
   ---------------------------------------------------- */
   function renderBubble(msg) {
-  const isMine = msg.sender === currentUser;
-  const senderName =
-    msg.sender === currentUser
-      ? currentProfileName
-      : msg.senderProfileName || msg.sender || "Unknown";
+    const isMine = msg.sender === currentUser;
+    const senderName =
+      msg.sender === currentUser
+        ? currentProfileName
+        : msg.senderProfileName || msg.sender || "Unknown";
 
-  const time = new Date(msg.timestamp).toLocaleString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    day: "2-digit",
-    month: "short",
-  });
+    const time = new Date(msg.timestamp).toLocaleString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      day: "2-digit",
+      month: "short",
+    });
 
-  const isOnline = onlineUsers[msg.sender];
-  const isImage =
-    msg.attachmentType?.startsWith("image/") ||
-    msg.attachmentKey?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+    const isOnline = onlineUsers[msg.sender];
+    const isImage =
+      msg.attachmentType?.startsWith("image/") ||
+      msg.attachmentKey?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
 
-  const fileUrl = msg.attachmentKey
-    ? `${S3_BUCKET_URL}/${msg.attachmentKey}`
-    : null;
+    // Prefer signed GET URL if available
+    const fileUrl =
+      msg.viewURL ||
+      (msg.attachmentKey
+        ? `${S3_BUCKET_URL}/${msg.attachmentKey}`
+        : null);
 
-  // 🎞️ Detect animated GIFs
-  const isGif =
-    msg.attachmentType === "image/gif" ||
-    msg.attachmentKey?.toLowerCase().endsWith(".gif");
+    const isGif =
+      msg.attachmentType === "image/gif" ||
+      msg.attachmentKey?.toLowerCase().endsWith(".gif");
 
-  return (
-    <div
-      key={msg.messageid || `${msg.sender}-${msg.timestamp}`}
-      className={`flex items-end gap-2 ${
-        isMine ? "flex-row-reverse text-right" : "flex-row text-left"
-      }`}
-    >
-      <div className="relative">
-        <Avatar seed={senderName} username={senderName} size={10} style="micah" />
-        {isOnline && (
-          <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
-        )}
-      </div>
-
+    return (
       <div
-        className={`p-3 rounded-lg max-w-[70%] ${
-          isMine
-            ? "bg-blue-600 text-white ml-auto"
-            : "bg-white border text-slate-800"
+        key={msg.messageid || `${msg.sender}-${msg.timestamp}`}
+        className={`flex items-end gap-2 ${
+          isMine ? "flex-row-reverse text-right" : "flex-row text-left"
         }`}
       >
-        {!isMine && (
-          <div className="text-xs font-semibold text-slate-500 mb-1">
-            {senderName}
-          </div>
-        )}
-
-        {msg.text && (
-          <div className="whitespace-pre-wrap break-words">{msg.text}</div>
-        )}
-
-        {/* 📎 ATTACHMENT PREVIEW */}
-        {fileUrl && (
-          <div className="mt-2">
-            {isGif ? (
-              // 🌀 Render animated GIF as <img>, not <video>
-              <img
-                src={fileUrl}
-                alt="animated gif"
-                className="max-h-64 rounded-lg border border-slate-300 object-contain"
-                loading="lazy"
-              />
-            ) : isImage ? (
-              <a
-                href={fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block rounded-lg overflow-hidden border border-slate-300 hover:opacity-90 transition"
-              >
-                <img
-                  src={fileUrl}
-                  alt="attachment"
-                  className="max-h-64 object-cover"
-                  loading="lazy"
-                />
-              </a>
-            ) : (
-              <a
-                href={fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-blue-100 hover:text-blue-300 underline"
-              >
-                <FileText className="w-4 h-4" />
-                <span>{msg.attachmentKey.split("/").pop()}</span>
-              </a>
-            )}
-          </div>
-        )}
+        <div className="relative">
+          <Avatar seed={senderName} username={senderName} size={10} style="micah" />
+          {isOnline && (
+            <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
+          )}
+        </div>
 
         <div
-          className={`text-xs mt-2 ${
-            isMine ? "text-blue-200" : "text-slate-500"
+          className={`p-3 rounded-lg max-w-[70%] ${
+            isMine
+              ? "bg-blue-600 text-white ml-auto"
+              : "bg-white border text-slate-800"
           }`}
         >
-          {time}
+          {!isMine && (
+            <div className="text-xs font-semibold text-slate-500 mb-1">
+              {senderName}
+            </div>
+          )}
+
+          {msg.text && (
+            <div className="whitespace-pre-wrap break-words">{msg.text}</div>
+          )}
+
+          {/* 📎 ATTACHMENT PREVIEW */}
+          {fileUrl && (
+            <div className="mt-2">
+              {isGif ? (
+                <img
+                  src={fileUrl}
+                  alt="animated gif"
+                  className="max-h-64 rounded-lg border border-slate-300 object-contain"
+                  loading="lazy"
+                />
+              ) : isImage ? (
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block rounded-lg overflow-hidden border border-slate-300 hover:opacity-90 transition"
+                >
+                  <img
+                    src={fileUrl}
+                    alt="attachment"
+                    className="max-h-64 object-cover"
+                    loading="lazy"
+                  />
+                </a>
+              ) : (
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-blue-100 hover:text-blue-300 underline"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>{msg.attachmentKey?.split("/").pop()}</span>
+                </a>
+              )}
+            </div>
+          )}
+
+          <div
+            className={`text-xs mt-2 ${
+              isMine ? "text-blue-200" : "text-slate-500"
+            }`}
+          >
+            {time}
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
-
+    );
+  }
 
   /* ----------------------------------------------------
      RETURN LAYOUT
@@ -367,7 +371,9 @@ export default function ChatWindow({ activeUser, currentUser }) {
             <div>
               <div>{activeUser.name || activeUser.username}</div>
               {remoteTyping && (
-                <div className="text-xs text-slate-500 animate-pulse">typing...</div>
+                <div className="text-xs text-slate-500 animate-pulse">
+                  typing...
+                </div>
               )}
             </div>
           </>
@@ -464,7 +470,11 @@ export default function ChatWindow({ activeUser, currentUser }) {
                   : "bg-blue-600 hover:bg-blue-700 text-white"
               }`}
             >
-              {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+              {uploading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Send className="w-5 h-5" />
+              )}
             </button>
           </form>
         </div>

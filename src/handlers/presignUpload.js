@@ -27,7 +27,7 @@ module.exports.handler = async (event) => {
     if (!name)
       return response(400, { success: false, message: "Missing file name" });
 
-    // 🧠 Infer MIME type if frontend didn’t provide one
+    // Infer MIME type
     if (!type) {
       const ext = name.split(".").pop().toLowerCase();
       const mimeMap = {
@@ -44,38 +44,31 @@ module.exports.handler = async (event) => {
       type = mimeMap[ext] || "application/octet-stream";
     }
 
-    // 🧩 Generate a unique file key
     const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const uniqueId = crypto.randomBytes(8).toString("hex");
     const fileKey = `attachments/${Date.now()}-${uniqueId}-${safeName}`;
 
-    // ✅ Allow public access to uploaded file
-    const params = {
+    // Presigned PUT for upload
+    const putParams = {
       Bucket: BUCKET,
       Key: fileKey,
       ContentType: type,
-      Expires: 300, // 5 minutes
-      ACL: "public-read", // 👈 crucial fix
+      Expires: 300, // 5 min
     };
+    const uploadURL = await s3.getSignedUrlPromise("putObject", putParams);
 
-    console.log("🧾 PRESIGN PARAMS:", params);
-
-    // Generate presigned PUT URL
-    const uploadURL = await s3.getSignedUrlPromise("putObject", params);
-
-    const region = process.env.AWS_REGION || "eu-west-2";
-    const publicUrl = `https://${BUCKET}.s3.${region}.amazonaws.com/${fileKey}`;
-
-    console.log("✅ Generated presigned URL and public URL:", {
-      uploadURL,
-      publicUrl,
+    // Presigned GET for viewing
+    const viewURL = await s3.getSignedUrlPromise("getObject", {
+      Bucket: BUCKET,
+      Key: fileKey,
+      Expires: 86400, // 24 hours
     });
 
     return response(200, {
       success: true,
       uploadURL,
       fileKey,
-      publicUrl,
+      viewURL,
       contentType: type,
     });
   } catch (err) {
