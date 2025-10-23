@@ -15,7 +15,7 @@ custom:
     reloadHandler: true
     ignoreJWTSignature: true
     corsAllowOrigin: "*"
-    noPrependStageInUrl: false  # ✅ keeps /dev prefix visible in URLs
+    noPrependStageInUrl: false # ✅ keeps /dev prefix visible in URLs
 
 provider:
   name: aws
@@ -32,12 +32,13 @@ provider:
     GROUPS_TABLE: chatr-groups
     READ_TRACKING_TABLE: chatr-read-tracking
     ATTACHMENTS_BUCKET: outsec-chat-bucket
+    TYPING_TABLE: chatr-typing-status
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
 
   iam:
     role:
       statements:
-        # ✅ DynamoDB full access for the four app tables
+        # ✅ DynamoDB access (all app tables)
         - Effect: Allow
           Action:
             - dynamodb:Scan
@@ -51,6 +52,7 @@ provider:
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-messages
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-groups
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
+            - arn:aws:dynamodb:eu-west-2:*:table/chatr-typing-status
 
         # ✅ S3 access
         - Effect: Allow
@@ -62,7 +64,7 @@ provider:
             - arn:aws:s3:::outsec-chat-bucket
             - arn:aws:s3:::outsec-chat-bucket/*
 
-        # ✅ CloudWatch logging (all functions)
+        # ✅ CloudWatch logging (for all functions)
         - Effect: Allow
           Action:
             - logs:CreateLogGroup
@@ -101,7 +103,7 @@ functions:
           method: any
           cors: true
 
-  # --- Messages (with subroutes) ---
+  # --- Messages ---
   messages:
     handler: src/handlers/messages.handler
     events:
@@ -144,3 +146,20 @@ functions:
             parameters:
               querystrings:
                 key: true
+
+  # --- Typing Indicators ---
+  typing:
+    handler: src/handlers/typing.handler
+    events:
+      - http:
+          path: typing/start
+          method: post
+          cors: true
+      - http:
+          path: typing/stop
+          method: post
+          cors: true
+      - http:
+          path: typing
+          method: get
+          cors: true
