@@ -10,39 +10,49 @@ const response = (statusCode, body) => ({
   headers: {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    "Access-Control-Allow-Methods": "OPTIONS,POST",
   },
   body: JSON.stringify(body),
 });
 
 export const handler = async (event) => {
-  console.log("📤 FILE UPLOAD EVENT:", event.body ? event.body.slice(0, 200) + "..." : "No body");
+  console.log("📦 PRESIGNED UPLOAD EVENT:", event);
+
+  // Handle preflight OPTIONS request
+  if (event.httpMethod === "OPTIONS") {
+    return response(200, { message: "CORS preflight success" });
+  }
 
   try {
     const body = JSON.parse(event.body || "{}");
-    const { base64, name, type } = body;
+    const { name, type } = body;
 
-    if (!base64 || !name || !type)
-      return response(400, { success: false, message: "Missing base64, name or type" });
+    if (!name || !type)
+      return response(400, { success: false, message: "Missing file name or type" });
 
-    const fileBuffer = Buffer.from(base64, "base64");
     const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const key = `attachments/${Date.now()}-${crypto.randomBytes(4).toString("hex")}-${safeName}`;
+    const key = `attachments/${Date.now()}-${crypto
+      .randomBytes(4)
+      .toString("hex")}-${safeName}`;
 
-    await s3
-      .putObject({
-        Bucket: BUCKET,
-        Key: key,
-        Body: fileBuffer,
-        ContentType: type,
-      })
-      .promise();
+    const params = {
+      Bucket: BUCKET,
+      Key: key,
+      ContentType: type,
+      Expires: 300, // valid for 5 minutes
+    };
 
-    const fileUrl = `https://${BUCKET}.s3.eu-west-2.amazonaws.com/${key}`;
-    console.log("✅ File uploaded:", fileUrl);
+    const uploadURL = await s3.getSignedUrlPromise("putObject", params);
 
-    return response(200, { success: true, key, url: fileUrl });
+    return response(200, {
+      success: true,
+      uploadURL,
+      fileKey: key,
+      publicUrl: `https://${BUCKET}.s3.eu-west-2.amazonaws.com/${key}`,
+    });
   } catch (err) {
-    console.error("❌ FILE UPLOAD ERROR:", err);
+    console.error("❌ PRESIGNED URL ERROR:", err);
     return response(500, { success: false, message: err.message });
   }
 };

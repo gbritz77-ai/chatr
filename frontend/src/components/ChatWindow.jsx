@@ -3,16 +3,18 @@ import { postJSON, getJSON } from "../lib/api";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
 import { Avatar } from "../components/Avatar";
-import { Send, Smile, Paperclip } from "lucide-react";
+import { Send, Smile, Paperclip, Loader2, Image as ImageIcon } from "lucide-react";
 
 /* ============================================================
-   💬 Main ChatWindow Component
+   💬 ChatWindow (Presigned Upload + Progress + Thumbnails)
 ============================================================ */
-export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
+export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
   const [messages, setMessages] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [attachment, setAttachment] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
   const [lastReadTimestamp, setLastReadTimestamp] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
   const [remoteTyping, setRemoteTyping] = useState(false);
@@ -49,9 +51,6 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
     }
   }
 
-  /* ----------------------------------------------------
-     AUTO-REFRESH EVERY 2 SECONDS
-  ---------------------------------------------------- */
   useEffect(() => {
     if (!activeUser || !currentUser) return;
     loadMessages();
@@ -89,7 +88,7 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
       if (activeUser?.username) {
         setOnlineUsers((prev) => ({
           ...prev,
-          [activeUser.username]: Math.random() > 0.2, // 80% chance online
+          [activeUser.username]: Math.random() > 0.2,
         }));
       }
     }, 5000);
@@ -128,6 +127,55 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
   }, [messages]);
 
   /* ----------------------------------------------------
+     PRESIGNED UPLOAD WITH PROGRESS
+  ---------------------------------------------------- */
+  async function uploadToS3(file) {
+    try {
+      setUploading(true);
+      setUploadProgress(0);
+
+      // Step 1: Request presigned URL
+      const res = await fetch(`${import.meta.env.VITE_API_BASE}/files`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, type: file.type }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || "Failed to get upload URL");
+
+      // Step 2: Upload via XHR (progress tracking)
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", data.uploadURL, true);
+        xhr.setRequestHeader("Content-Type", file.type);
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            setUploadProgress(percent);
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status === 200) resolve();
+          else reject(new Error("Upload failed"));
+        };
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.send(file);
+      });
+
+      console.log("✅ Uploaded to S3:", data.publicUrl);
+      return { success: true, url: data.publicUrl, key: data.fileKey, type: file.type };
+    } catch (err) {
+      console.error("❌ Upload failed:", err);
+      return { success: false, message: err.message };
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  }
+
+  /* ----------------------------------------------------
      SEND MESSAGE
   ---------------------------------------------------- */
   async function sendMessage(e) {
@@ -135,14 +183,16 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
     if ((!text.trim() && !attachment) || !activeUser) return;
 
     try {
+      let fileUrl = null;
       let fileKey = null;
       let fileType = null;
 
       if (attachment) {
-        const uploadRes = await onUploadFile(attachment);
+        const uploadRes = await uploadToS3(attachment);
         if (uploadRes?.success) {
+          fileUrl = uploadRes.url;
           fileKey = uploadRes.key;
-          fileType = attachment.type;
+          fileType = uploadRes.type;
         }
       }
 
@@ -152,6 +202,7 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
               sender: currentUser,
               groupid: activeUser.id,
               text: text || null,
+              attachmentUrl: fileUrl,
               attachmentKey: fileKey,
               attachmentType: fileType,
             }
@@ -159,6 +210,7 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
               sender: currentUser,
               recipient: activeUser.username,
               text: text || null,
+              attachmentUrl: fileUrl,
               attachmentKey: fileKey,
               attachmentType: fileType,
             };
@@ -203,6 +255,9 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
     });
 
     const isOnline = onlineUsers[msg.sender];
+    const isImage =
+      msg.attachmentType?.startsWith("image/") ||
+      msg.attachmentUrl?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
 
     return (
       <div
@@ -212,12 +267,7 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
         }`}
       >
         <div className="relative">
-          <Avatar
-            seed={senderName}
-            username={senderName}
-            size={10}
-            style="micah"
-          />
+          <Avatar seed={senderName} username={senderName} size={10} style="micah" />
           {isOnline && (
             <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
           )}
@@ -238,18 +288,35 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
           {msg.text && (
             <div className="whitespace-pre-wrap break-words">{msg.text}</div>
           )}
-          {msg.attachmentKey && (
+
+          {/* 🖼️ Inline Image Preview */}
+          {isImage && msg.attachmentUrl && (
             <a
-              href={`${import.meta.env.VITE_API_BASE}/attachments?key=${encodeURIComponent(
-                msg.attachmentKey
-              )}`}
+              href={msg.attachmentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block mt-2 rounded-lg overflow-hidden border border-slate-300 hover:opacity-90 transition"
+            >
+              <img
+                src={msg.attachmentUrl}
+                alt="attachment"
+                className="max-h-64 object-cover"
+              />
+            </a>
+          )}
+
+          {/* 📎 Non-image file link */}
+          {!isImage && msg.attachmentUrl && (
+            <a
+              href={msg.attachmentUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="block mt-2 underline text-blue-200 hover:text-blue-400"
             >
-              📎 {msg.attachmentKey.split("/").pop()}
+              📎 {msg.attachmentUrl.split("/").pop()}
             </a>
           )}
+
           <div
             className={`text-xs mt-2 ${
               isMine ? "text-blue-200" : "text-slate-500"
@@ -309,6 +376,16 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Upload Progress Bar */}
+      {uploading && (
+        <div className="absolute bottom-[115px] left-0 w-full bg-slate-200 h-1">
+          <div
+            className="bg-blue-600 h-1 transition-all duration-200"
+            style={{ width: `${uploadProgress}%` }}
+          ></div>
+        </div>
+      )}
+
       {/* Floating Input Bar */}
       {activeUser && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-xl border border-slate-200 rounded-full shadow-lg px-6 py-3 w-[90%] max-w-3xl transition">
@@ -331,11 +408,7 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
                 ref={pickerRef}
                 className="absolute bottom-16 left-0 z-50 shadow-xl border rounded-lg bg-white"
               >
-                <Picker
-                  data={data}
-                  theme="light"
-                  onEmojiSelect={handleEmojiSelect}
-                />
+                <Picker data={data} theme="light" onEmojiSelect={handleEmojiSelect} />
               </div>
             )}
 
@@ -351,6 +424,13 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
               />
             </label>
 
+            {attachment && (
+              <span className="text-xs text-slate-500 truncate max-w-[200px]">
+                📎 {attachment.name}
+                {uploading && " (uploading...)"}
+              </span>
+            )}
+
             <input
               type="text"
               placeholder="Type a message..."
@@ -361,9 +441,18 @@ export default function ChatWindow({ activeUser, currentUser, onUploadFile }) {
 
             <button
               type="submit"
-              className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-sm transition"
+              disabled={uploading}
+              className={`p-3 rounded-full shadow-sm transition ${
+                uploading
+                  ? "bg-slate-400 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700 text-white"
+              }`}
             >
-              <Send className="w-5 h-5" />
+              {uploading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Send className="w-5 h-5" />
+              )}
             </button>
           </form>
         </div>

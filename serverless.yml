@@ -15,7 +15,7 @@ custom:
     reloadHandler: true
     ignoreJWTSignature: true
     corsAllowOrigin: "*"
-    noPrependStageInUrl: false # ✅ keeps /dev prefix visible in URLs
+    noPrependStageInUrl: false
 
 provider:
   name: aws
@@ -23,6 +23,7 @@ provider:
   region: eu-west-2
   stage: dev
 
+  # ✅ Environment variables for all Lambdas
   environment:
     JWT_SECRET: SuperSecretKey123!
     VITE_API_BASE: https://byu72oz79h.execute-api.eu-west-2.amazonaws.com/dev
@@ -37,6 +38,7 @@ provider:
   iam:
     role:
       statements:
+        # ✅ DynamoDB access
         - Effect: Allow
           Action:
             - dynamodb:Scan
@@ -52,6 +54,7 @@ provider:
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-typing-status
 
+        # ✅ S3 upload/download permissions
         - Effect: Allow
           Action:
             - s3:PutObject
@@ -61,6 +64,7 @@ provider:
             - arn:aws:s3:::outsec-chat-bucket
             - arn:aws:s3:::outsec-chat-bucket/*
 
+        # ✅ CloudWatch logging
         - Effect: Allow
           Action:
             - logs:CreateLogGroup
@@ -88,8 +92,6 @@ functions:
             methods:
               - OPTIONS
               - POST
-
-      # ✅ Explicit OPTIONS handler for preflight
       - http:
           path: auth
           method: options
@@ -122,8 +124,6 @@ functions:
             methods:
               - OPTIONS
               - POST
-
-      # ✅ Explicit OPTIONS handler for preflight
       - http:
           path: auth/register
           method: options
@@ -171,14 +171,38 @@ functions:
           method: any
           cors: true
 
-  # --- Files ---
-  files:
-    handler: src/handlers/files.handler
-    events:
-      - http:
-          path: files
-          method: any
-          cors: true
+  # --- Files (Upload Attachments) ---
+  # --- Files (Presigned Uploads) ---
+files:
+  handler: src/handlers/files.handler
+  events:
+    - http:
+        path: files
+        method: post
+        cors:
+          origin: '*'
+          headers:
+            - Content-Type
+            - Authorization
+          allowCredentials: false
+          methods:
+            - OPTIONS
+            - POST
+    - http:
+        path: files
+        method: options
+        integration: mock
+        request:
+          template:
+            application/json: '{"statusCode":200}'
+        response:
+          statusCodes:
+            200:
+              pattern: ''
+              headers:
+                Access-Control-Allow-Origin: "'*'"
+                Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+                Access-Control-Allow-Methods: "'OPTIONS,POST'"
 
   # --- Attachments (Download) ---
   getAttachment:
@@ -187,7 +211,11 @@ functions:
       - http:
           path: attachments
           method: get
-          cors: true
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+            allowCredentials: false
           request:
             parameters:
               querystrings:
