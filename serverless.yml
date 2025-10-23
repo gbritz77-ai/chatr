@@ -170,7 +170,7 @@ functions:
           method: any
           cors: true
 
-  # --- Files (Upload Attachments) ---
+  # --- Files (Legacy Upload) ---
   files:
     handler: src/handlers/files.handler
     events:
@@ -202,12 +202,12 @@ functions:
                   Access-Control-Allow-Headers: "'Content-Type,Authorization'"
                   Access-Control-Allow-Methods: "'OPTIONS,POST'"
 
-  # --- Pre-signed Upload URL ---
+  # --- ✅ Pre-signed Upload URL (Fixed Path) ---
   presignUpload:
     handler: src/handlers/presignUpload.handler
     events:
       - http:
-          path: files/presign
+          path: presign-upload
           method: post
           cors:
             origin: '*'
