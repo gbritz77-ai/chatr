@@ -6,7 +6,7 @@ import { Avatar } from "../components/Avatar";
 import { Send, Smile, Paperclip, Loader2, FileText, AlertTriangle } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — Signed URL Upload + Secure Attachment Display
+   💬 ChatWindow — Sticky Input + Signed URLs + Auto Scroll
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -19,7 +19,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const [isTyping, setIsTyping] = useState(false);
   const [remoteTyping, setRemoteTyping] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState({});
-  const [errorUrl, setErrorUrl] = useState(null); // ⛔ Track expired signed URLs
+  const [errorUrl, setErrorUrl] = useState(null);
 
   const pickerRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -116,17 +116,15 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }, [messages]);
 
   /* ----------------------------------------------------
-     PRESIGNED UPLOAD (Signed PUT URLs)
+     PRESIGNED UPLOAD
   ---------------------------------------------------- */
   async function getPresignedUrl(file) {
-    console.log("📦 Requesting presign for:", { name: file.name, type: file.type });
     try {
       const res = await fetch(`${import.meta.env.VITE_API_BASE}/presign-upload`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: file.name, type: file.type }),
       });
-
       const data = await res.json();
       if (!data.success || !data.uploadURL) throw new Error("Presign failed");
       return data;
@@ -146,18 +144,13 @@ export default function ChatWindow({ activeUser, currentUser }) {
       xhr.setRequestHeader("Content-Type", file.type);
 
       xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const percent = Math.round((e.loaded / e.total) * 100);
-          setUploadProgress(percent);
-        }
+        if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
       };
 
       xhr.onload = () => {
         setUploading(false);
-        if (xhr.status === 200) resolve();
-        else reject(new Error(`S3 upload failed (${xhr.status})`));
+        xhr.status === 200 ? resolve() : reject(new Error(`S3 upload failed (${xhr.status})`));
       };
-
       xhr.onerror = (err) => {
         setUploading(false);
         reject(err);
@@ -203,19 +196,11 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
-     EMOJI + FILE
-  ---------------------------------------------------- */
-  const toggleEmojiPicker = () => setShowEmojiPicker((p) => !p);
-  const handleEmojiSelect = (emoji) => setText((t) => t + emoji.native);
-  const handleFileChange = (file) => file && setAttachment(file);
-
-  /* ----------------------------------------------------
      RENDER MESSAGES
   ---------------------------------------------------- */
   function renderBubble(msg) {
     const isMine = msg.sender === currentUser;
     const senderName = isMine ? currentProfileName : msg.senderProfileName || msg.sender || "Unknown";
-
     const time = new Date(msg.timestamp).toLocaleString([], {
       hour: "2-digit",
       minute: "2-digit",
@@ -225,19 +210,11 @@ export default function ChatWindow({ activeUser, currentUser }) {
 
     const isOnline = onlineUsers[msg.sender];
     const isImage = msg.attachmentType?.startsWith("image/") || msg.attachmentKey?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
-    const isGif = msg.attachmentType === "image/gif" || msg.attachmentKey?.toLowerCase().endsWith(".gif");
-
-    // ✅ Prefer signed URL from backend (msg.attachmentUrl)
     const fileUrl =
-      msg.attachmentUrl ||
-      msg.viewURL ||
-      (msg.attachmentKey ? `${S3_BUCKET_URL}/${msg.attachmentKey}` : null);
+      msg.attachmentUrl || msg.viewURL || (msg.attachmentKey ? `${S3_BUCKET_URL}/${msg.attachmentKey}` : null);
 
     return (
-      <div
-        key={msg.messageid || `${msg.sender}-${msg.timestamp}`}
-        className={`flex items-end gap-2 ${isMine ? "flex-row-reverse text-right" : "flex-row text-left"}`}
-      >
+      <div key={msg.messageid || `${msg.sender}-${msg.timestamp}`} className={`flex items-end gap-2 ${isMine ? "flex-row-reverse" : ""}`}>
         <div className="relative">
           <Avatar seed={senderName} username={senderName} size={10} style="micah" />
           {isOnline && <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />}
@@ -245,10 +222,8 @@ export default function ChatWindow({ activeUser, currentUser }) {
 
         <div className={`p-3 rounded-lg max-w-[70%] ${isMine ? "bg-blue-600 text-white ml-auto" : "bg-white border text-slate-800"}`}>
           {!isMine && <div className="text-xs font-semibold text-slate-500 mb-1">{senderName}</div>}
-
           {msg.text && <div className="whitespace-pre-wrap break-words">{msg.text}</div>}
 
-          {/* 📎 ATTACHMENT PREVIEW */}
           {fileUrl && (
             <div className="mt-2">
               {isImage ? (
@@ -256,16 +231,10 @@ export default function ChatWindow({ activeUser, currentUser }) {
                   src={fileUrl}
                   alt="attachment"
                   className="max-h-64 rounded-lg border border-slate-300 object-contain cursor-pointer hover:opacity-90 transition"
-                  loading="lazy"
                   onError={() => setErrorUrl(fileUrl)}
                 />
               ) : (
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-blue-100 hover:text-blue-300 underline"
-                >
+                <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-100 hover:text-blue-300 underline">
                   <FileText className="w-4 h-4" />
                   <span>{msg.attachmentKey?.split("/").pop()}</span>
                 </a>
@@ -278,7 +247,6 @@ export default function ChatWindow({ activeUser, currentUser }) {
               )}
             </div>
           )}
-
           <div className={`text-xs mt-2 ${isMine ? "text-blue-200" : "text-slate-500"}`}>{time}</div>
         </div>
       </div>
@@ -286,10 +254,10 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
-     RETURN LAYOUT
+     RETURN LAYOUT — Sticky Input Bar Version
   ---------------------------------------------------- */
   return (
-    <div className="flex flex-col flex-1 h-screen ml-[320px] bg-slate-50 relative">
+    <div className="flex flex-col flex-1 h-screen ml-[320px] bg-slate-50">
       {/* Header */}
       <div className="sticky top-0 z-10 border-b bg-white/70 backdrop-blur-lg p-4 font-semibold text-slate-700 flex items-center gap-3">
         {activeUser ? (
@@ -306,7 +274,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-4 pb-[200px] sm:pb-[180px] md:pb-[160px]">
+      <div className="flex-1 overflow-y-auto p-5 space-y-4">
         {activeUser ? (
           messages.length ? (
             messages.map(renderBubble)
@@ -319,37 +287,35 @@ export default function ChatWindow({ activeUser, currentUser }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Upload Progress */}
+      {/* Upload Progress Bar */}
       {uploading && (
-        <div className="absolute bottom-[115px] left-0 w-full bg-slate-200 h-1">
+        <div className="absolute bottom-[70px] left-0 w-full bg-slate-200 h-1">
           <div className="bg-blue-600 h-1 transition-all duration-200" style={{ width: `${uploadProgress}%` }}></div>
         </div>
       )}
 
-      {/* Input Bar */}
+      {/* Sticky Input Bar */}
       {activeUser && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-xl border border-slate-200 rounded-full shadow-lg px-6 py-3 w-[90%] max-w-3xl transition">
+        <div className="sticky bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-inner px-6 py-3">
           <form onSubmit={sendMessage} className="flex items-center gap-3">
             <button
               type="button"
-              onClick={toggleEmojiPicker}
-              className={`p-2 rounded-full transition ${
-                showEmojiPicker ? "text-blue-600 bg-blue-50" : "text-slate-500 hover:text-blue-600 hover:bg-slate-100"
-              }`}
+              onClick={() => setShowEmojiPicker((p) => !p)}
+              className={`p-2 rounded-full transition ${showEmojiPicker ? "text-blue-600 bg-blue-50" : "text-slate-500 hover:text-blue-600 hover:bg-slate-100"}`}
               title="Insert emoji"
             >
               <Smile className="w-5 h-5" />
             </button>
 
             {showEmojiPicker && (
-              <div ref={pickerRef} className="absolute bottom-16 left-0 z-50 shadow-xl border rounded-lg bg-white">
-                <Picker data={data} theme="light" onEmojiSelect={handleEmojiSelect} />
+              <div ref={pickerRef} className="absolute bottom-20 left-6 z-50 shadow-xl border rounded-lg bg-white">
+                <Picker data={data} theme="light" onEmojiSelect={(emoji) => setText((t) => t + emoji.native)} />
               </div>
             )}
 
             <label title="Attach file" className="p-2 rounded-full cursor-pointer text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition">
               <Paperclip className="w-5 h-5" />
-              <input type="file" hidden onChange={(e) => handleFileChange(e.target.files[0])} />
+              <input type="file" hidden onChange={(e) => e.target.files[0] && setAttachment(e.target.files[0])} />
             </label>
 
             {attachment && (
