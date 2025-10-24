@@ -3,7 +3,7 @@ import { postJSON, getJSON } from "../lib/api";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
 import { Avatar } from "../components/Avatar";
-import { Send, Smile, Paperclip, Loader2, FileText } from "lucide-react";
+import { Send, Smile, Paperclip, Loader2, FileText, AlertTriangle } from "lucide-react";
 
 /* ============================================================
    💬 ChatWindow — Signed URL Upload + Secure Attachment Display
@@ -19,6 +19,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const [isTyping, setIsTyping] = useState(false);
   const [remoteTyping, setRemoteTyping] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState({});
+  const [errorUrl, setErrorUrl] = useState(null); // ⛔ Track expired signed URLs
 
   const pickerRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -35,13 +36,9 @@ export default function ChatWindow({ activeUser, currentUser }) {
     try {
       let url = "";
       if (activeUser.type === "group") {
-        url = `/messages?groupid=${encodeURIComponent(
-          activeUser.id
-        )}&username=${encodeURIComponent(currentUser)}`;
+        url = `/messages?groupid=${encodeURIComponent(activeUser.id)}&username=${encodeURIComponent(currentUser)}`;
       } else if (activeUser.type === "user") {
-        url = `/messages?userA=${encodeURIComponent(
-          currentUser
-        )}&userB=${encodeURIComponent(activeUser.username)}`;
+        url = `/messages?userA=${encodeURIComponent(currentUser)}&userB=${encodeURIComponent(activeUser.username)}`;
       }
 
       const res = await getJSON(url);
@@ -54,7 +51,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   useEffect(() => {
     if (!activeUser || !currentUser) return;
     loadMessages();
-    const interval = setInterval(loadMessages, 2000);
+    const interval = setInterval(loadMessages, 3000);
     return () => clearInterval(interval);
   }, [activeUser, currentUser]);
 
@@ -67,8 +64,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       const chatId =
         activeUser.type === "group"
           ? activeUser.id
-          : `CHAT#${[activeUser.username, currentUser].sort().join("#")}`;
-
+          : `${[activeUser.username, currentUser].sort().join("#")}`;
       await postJSON("/messages/mark-read", { chatId, username: currentUser });
       setLastReadTimestamp(new Date().toISOString());
     } catch (err) {
@@ -120,19 +116,18 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }, [messages]);
 
   /* ----------------------------------------------------
-     PRESIGNED UPLOAD (Signed GET URLs)
+     PRESIGNED UPLOAD (Signed PUT URLs)
   ---------------------------------------------------- */
   async function getPresignedUrl(file) {
     console.log("📦 Requesting presign for:", { name: file.name, type: file.type });
     try {
-        const res = await fetch(`${import.meta.env.VITE_API_BASE}/presign-upload`, {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE}/presign-upload`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: file.name, type: file.type }),
       });
 
       const data = await res.json();
-      console.log("📜 Presign response:", data);
       if (!data.success || !data.uploadURL) throw new Error("Presign failed");
       return data;
     } catch (err) {
@@ -142,7 +137,6 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   async function uploadToS3(file, presignedUrl) {
-    console.log("🧩 Upload start", { name: file.name, type: file.type, size: file.size });
     setUploading(true);
     setUploadProgress(0);
 
@@ -160,18 +154,12 @@ export default function ChatWindow({ activeUser, currentUser }) {
 
       xhr.onload = () => {
         setUploading(false);
-        if (xhr.status === 200) {
-          console.log("✅ Upload succeeded!");
-          resolve();
-        } else {
-          console.error("❌ Upload failed:", xhr.responseText || xhr.statusText);
-          reject(new Error(`S3 upload failed (${xhr.status})`));
-        }
+        if (xhr.status === 200) resolve();
+        else reject(new Error(`S3 upload failed (${xhr.status})`));
       };
 
       xhr.onerror = (err) => {
         setUploading(false);
-        console.error("🚨 Upload error:", err);
         reject(err);
       };
 
@@ -189,39 +177,20 @@ export default function ChatWindow({ activeUser, currentUser }) {
     try {
       let fileKey = null;
       let fileType = null;
-      let viewURL = null;
 
       if (attachment) {
-        console.log("📎 Uploading attachment:", attachment.name);
         const presign = await getPresignedUrl(attachment);
         await uploadToS3(attachment, presign.uploadURL);
         fileKey = presign.fileKey;
         fileType = attachment.type;
-        viewURL = presign.viewURL; // <-- Signed GET URL
       }
 
       const payload =
         activeUser.type === "group"
-          ? {
-              sender: currentUser,
-              groupid: activeUser.id,
-              text: text || "",
-              attachmentKey: fileKey,
-              attachmentType: fileType,
-              viewURL,
-            }
-          : {
-              sender: currentUser,
-              recipient: activeUser.username,
-              text: text || "",
-              attachmentKey: fileKey,
-              attachmentType: fileType,
-              viewURL,
-            };
+          ? { sender: currentUser, groupid: activeUser.id, text, attachmentKey: fileKey, attachmentType: fileType }
+          : { sender: currentUser, recipient: activeUser.username, text, attachmentKey: fileKey, attachmentType: fileType };
 
-      console.log("📤 Sending message payload:", payload);
       await postJSON("/messages", payload);
-
       setText("");
       setAttachment(null);
       setShowEmojiPicker(false);
@@ -245,10 +214,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   ---------------------------------------------------- */
   function renderBubble(msg) {
     const isMine = msg.sender === currentUser;
-    const senderName =
-      msg.sender === currentUser
-        ? currentProfileName
-        : msg.senderProfileName || msg.sender || "Unknown";
+    const senderName = isMine ? currentProfileName : msg.senderProfileName || msg.sender || "Unknown";
 
     const time = new Date(msg.timestamp).toLocaleString([], {
       hour: "2-digit",
@@ -258,76 +224,41 @@ export default function ChatWindow({ activeUser, currentUser }) {
     });
 
     const isOnline = onlineUsers[msg.sender];
-    const isImage =
-      msg.attachmentType?.startsWith("image/") ||
-      msg.attachmentKey?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+    const isImage = msg.attachmentType?.startsWith("image/") || msg.attachmentKey?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+    const isGif = msg.attachmentType === "image/gif" || msg.attachmentKey?.toLowerCase().endsWith(".gif");
 
-    // Prefer signed GET URL if available
+    // ✅ Prefer signed URL from backend (msg.attachmentUrl)
     const fileUrl =
+      msg.attachmentUrl ||
       msg.viewURL ||
-      (msg.attachmentKey
-        ? `${S3_BUCKET_URL}/${msg.attachmentKey}`
-        : null);
-
-    const isGif =
-      msg.attachmentType === "image/gif" ||
-      msg.attachmentKey?.toLowerCase().endsWith(".gif");
+      (msg.attachmentKey ? `${S3_BUCKET_URL}/${msg.attachmentKey}` : null);
 
     return (
       <div
         key={msg.messageid || `${msg.sender}-${msg.timestamp}`}
-        className={`flex items-end gap-2 ${
-          isMine ? "flex-row-reverse text-right" : "flex-row text-left"
-        }`}
+        className={`flex items-end gap-2 ${isMine ? "flex-row-reverse text-right" : "flex-row text-left"}`}
       >
         <div className="relative">
           <Avatar seed={senderName} username={senderName} size={10} style="micah" />
-          {isOnline && (
-            <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
-          )}
+          {isOnline && <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />}
         </div>
 
-        <div
-          className={`p-3 rounded-lg max-w-[70%] ${
-            isMine
-              ? "bg-blue-600 text-white ml-auto"
-              : "bg-white border text-slate-800"
-          }`}
-        >
-          {!isMine && (
-            <div className="text-xs font-semibold text-slate-500 mb-1">
-              {senderName}
-            </div>
-          )}
+        <div className={`p-3 rounded-lg max-w-[70%] ${isMine ? "bg-blue-600 text-white ml-auto" : "bg-white border text-slate-800"}`}>
+          {!isMine && <div className="text-xs font-semibold text-slate-500 mb-1">{senderName}</div>}
 
-          {msg.text && (
-            <div className="whitespace-pre-wrap break-words">{msg.text}</div>
-          )}
+          {msg.text && <div className="whitespace-pre-wrap break-words">{msg.text}</div>}
 
           {/* 📎 ATTACHMENT PREVIEW */}
           {fileUrl && (
             <div className="mt-2">
-              {isGif ? (
+              {isImage ? (
                 <img
                   src={fileUrl}
-                  alt="animated gif"
-                  className="max-h-64 rounded-lg border border-slate-300 object-contain"
+                  alt="attachment"
+                  className="max-h-64 rounded-lg border border-slate-300 object-contain cursor-pointer hover:opacity-90 transition"
                   loading="lazy"
+                  onError={() => setErrorUrl(fileUrl)}
                 />
-              ) : isImage ? (
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block rounded-lg overflow-hidden border border-slate-300 hover:opacity-90 transition"
-                >
-                  <img
-                    src={fileUrl}
-                    alt="attachment"
-                    className="max-h-64 object-cover"
-                    loading="lazy"
-                  />
-                </a>
               ) : (
                 <a
                   href={fileUrl}
@@ -339,16 +270,16 @@ export default function ChatWindow({ activeUser, currentUser }) {
                   <span>{msg.attachmentKey?.split("/").pop()}</span>
                 </a>
               )}
+              {errorUrl === fileUrl && (
+                <div className="flex items-center gap-2 mt-2 text-xs text-red-400">
+                  <AlertTriangle className="w-4 h-4" />
+                  Link expired — reopen chat to refresh signed URL
+                </div>
+              )}
             </div>
           )}
 
-          <div
-            className={`text-xs mt-2 ${
-              isMine ? "text-blue-200" : "text-slate-500"
-            }`}
-          >
-            {time}
-          </div>
+          <div className={`text-xs mt-2 ${isMine ? "text-blue-200" : "text-slate-500"}`}>{time}</div>
         </div>
       </div>
     );
@@ -363,19 +294,10 @@ export default function ChatWindow({ activeUser, currentUser }) {
       <div className="sticky top-0 z-10 border-b bg-white/70 backdrop-blur-lg p-4 font-semibold text-slate-700 flex items-center gap-3">
         {activeUser ? (
           <>
-            <Avatar
-              seed={activeUser.name || activeUser.username}
-              username={activeUser.name || activeUser.username}
-              size={10}
-              style="micah"
-            />
+            <Avatar seed={activeUser.name || activeUser.username} username={activeUser.name || activeUser.username} size={10} style="micah" />
             <div>
               <div>{activeUser.name || activeUser.username}</div>
-              {remoteTyping && (
-                <div className="text-xs text-slate-500 animate-pulse">
-                  typing...
-                </div>
-              )}
+              {remoteTyping && <div className="text-xs text-slate-500 animate-pulse">typing...</div>}
             </div>
           </>
         ) : (
@@ -392,9 +314,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
             <p className="text-center text-slate-400 italic">No messages yet</p>
           )
         ) : (
-          <p className="text-center text-slate-400 italic mt-10">
-            Select a contact or group to start chatting
-          </p>
+          <p className="text-center text-slate-400 italic mt-10">Select a contact or group to start chatting</p>
         )}
         <div ref={messagesEndRef} />
       </div>
@@ -402,10 +322,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       {/* Upload Progress */}
       {uploading && (
         <div className="absolute bottom-[115px] left-0 w-full bg-slate-200 h-1">
-          <div
-            className="bg-blue-600 h-1 transition-all duration-200"
-            style={{ width: `${uploadProgress}%` }}
-          ></div>
+          <div className="bg-blue-600 h-1 transition-all duration-200" style={{ width: `${uploadProgress}%` }}></div>
         </div>
       )}
 
@@ -417,9 +334,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
               type="button"
               onClick={toggleEmojiPicker}
               className={`p-2 rounded-full transition ${
-                showEmojiPicker
-                  ? "text-blue-600 bg-blue-50"
-                  : "text-slate-500 hover:text-blue-600 hover:bg-slate-100"
+                showEmojiPicker ? "text-blue-600 bg-blue-50" : "text-slate-500 hover:text-blue-600 hover:bg-slate-100"
               }`}
               title="Insert emoji"
             >
@@ -427,24 +342,14 @@ export default function ChatWindow({ activeUser, currentUser }) {
             </button>
 
             {showEmojiPicker && (
-              <div
-                ref={pickerRef}
-                className="absolute bottom-16 left-0 z-50 shadow-xl border rounded-lg bg-white"
-              >
+              <div ref={pickerRef} className="absolute bottom-16 left-0 z-50 shadow-xl border rounded-lg bg-white">
                 <Picker data={data} theme="light" onEmojiSelect={handleEmojiSelect} />
               </div>
             )}
 
-            <label
-              title="Attach file"
-              className="p-2 rounded-full cursor-pointer text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition"
-            >
+            <label title="Attach file" className="p-2 rounded-full cursor-pointer text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition">
               <Paperclip className="w-5 h-5" />
-              <input
-                type="file"
-                hidden
-                onChange={(e) => handleFileChange(e.target.files[0])}
-              />
+              <input type="file" hidden onChange={(e) => handleFileChange(e.target.files[0])} />
             </label>
 
             {attachment && (
@@ -466,16 +371,10 @@ export default function ChatWindow({ activeUser, currentUser }) {
               type="submit"
               disabled={uploading}
               className={`p-3 rounded-full shadow-sm transition ${
-                uploading
-                  ? "bg-slate-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700 text-white"
+                uploading ? "bg-slate-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"
               }`}
             >
-              {uploading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Send className="w-5 h-5" />
-              )}
+              {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </button>
           </form>
         </div>
