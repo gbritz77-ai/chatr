@@ -319,7 +319,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       {!autoScrollEnabled && (
         <button
           onClick={scrollToBottom}
-          className="absolute bottom-24 right-6 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-3 shadow-lg transition"
+          className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-3 shadow-lg transition"
           title="Scroll to latest message"
         >
           <ArrowDown className="w-5 h-5" />
