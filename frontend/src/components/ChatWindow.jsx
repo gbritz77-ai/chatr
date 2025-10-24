@@ -3,10 +3,10 @@ import { postJSON, getJSON } from "../lib/api";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
 import { Avatar } from "../components/Avatar";
-import { Send, Smile, Paperclip, Loader2, FileText, AlertTriangle } from "lucide-react";
+import { Send, Smile, Paperclip, Loader2, FileText, AlertTriangle, ArrowDown } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — Sticky Input + Signed URLs + Auto Scroll
+   💬 ChatWindow — Sticky Input + Signed URLs + Smart Auto-Scroll + Scroll-to-Bottom Button
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -20,9 +20,11 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const [remoteTyping, setRemoteTyping] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState({});
   const [errorUrl, setErrorUrl] = useState(null);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
 
   const pickerRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const scrollContainerRef = useRef(null);
   const typingTimer = useRef(null);
 
   const currentProfileName = localStorage.getItem("profileName") || currentUser;
@@ -108,7 +110,33 @@ export default function ChatWindow({ activeUser, currentUser }) {
     return () => clearInterval(interval);
   }, [activeUser]);
 
-  
+  /* ----------------------------------------------------
+     AUTO-SCROLL + SCROLL TO BOTTOM BUTTON
+  ---------------------------------------------------- */
+  function handleScroll() {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    setAutoScrollEnabled(atBottom);
+  }
+
+  useEffect(() => {
+    if (autoScrollEnabled) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [activeUser]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    setAutoScrollEnabled(true);
+  };
 
   /* ----------------------------------------------------
      PRESIGNED UPLOAD
@@ -184,6 +212,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       setShowEmojiPicker(false);
       await loadMessages();
       await markAsRead();
+      scrollToBottom();
     } catch (err) {
       console.error("❌ Failed to send message:", err);
       alert("Message send failed: " + err.message);
@@ -249,10 +278,10 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
-     RETURN LAYOUT — Sticky Input Bar Version
+     RETURN LAYOUT
   ---------------------------------------------------- */
   return (
-    <div className="flex flex-col flex-1 h-screen ml-[320px] bg-slate-50">
+    <div className="flex flex-col flex-1 h-screen ml-[320px] bg-slate-50 relative">
       {/* Header */}
       <div className="sticky top-0 z-10 border-b bg-white/70 backdrop-blur-lg p-4 font-semibold text-slate-700 flex items-center gap-3">
         {activeUser ? (
@@ -269,7 +298,11 @@ export default function ChatWindow({ activeUser, currentUser }) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-4">
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-5 space-y-4"
+      >
         {activeUser ? (
           messages.length ? (
             messages.map(renderBubble)
@@ -281,6 +314,17 @@ export default function ChatWindow({ activeUser, currentUser }) {
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* 🪄 Scroll to Bottom Button */}
+      {!autoScrollEnabled && (
+        <button
+          onClick={scrollToBottom}
+          className="absolute bottom-24 right-6 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-3 shadow-lg transition"
+          title="Scroll to latest message"
+        >
+          <ArrowDown className="w-5 h-5" />
+        </button>
+      )}
 
       {/* Upload Progress Bar */}
       {uploading && (

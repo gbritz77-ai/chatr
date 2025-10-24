@@ -3,7 +3,6 @@ frameworkVersion: '3'
 
 plugins:
   - serverless-dotenv-plugin
-  - serverless-esbuild
   - serverless-offline
 
 custom:
@@ -17,16 +16,6 @@ custom:
     ignoreJWTSignature: true
     corsAllowOrigin: "*"
     noPrependStageInUrl: false
-
-  # ✅ Esbuild Configuration (moved here)
-  esbuild:
-    bundle: true
-    minify: true
-    exclude: ['aws-sdk']
-    target: 'node20'
-    platform: 'node'
-    sourcemap: false
-    concurrency: 10
 
 provider:
   name: aws
@@ -83,44 +72,63 @@ provider:
           Resource: arn:aws:logs:eu-west-2:*:log-group:*
 
 # ============================================================
-#                     FUNCTION DEFINITIONS
+# 🧱 Package Optimizations
+# ============================================================
+package:
+  individually: true
+  patterns:
+    # ✅ Keep AWS SDK included for Node 20 runtime
+    # - '!node_modules/aws-sdk/**'   ❌ Removed line
+    - '!node_modules/@aws-sdk/**'
+    - '!node_modules/**/test/**'
+    - '!node_modules/**/docs/**'
+    - '!node_modules/**/examples/**'
+    - '!node_modules/**/samples/**'
+    - '!**/.vscode/**'
+    - '!**/.git/**'
+    - '!**/dist/**'
+    - '!**/tmp/**'
+    - '!**/*.log'
+    - '!**/README.md'
+    - '!**/LICENSE*'
+
+# ============================================================
+# 🔧 Function Definitions
 # ============================================================
 functions:
-  # --- Auth (Login) ---
+  # --- 🔐 Auth (Login) ---
   auth:
     handler: src/handlers/auth.handler
+    package:
+      individually: true
+      patterns:
+        - src/handlers/auth.js
+        - node_modules/bcryptjs/**
+        - node_modules/jsonwebtoken/**
+        - node_modules/aws-sdk/**    # ✅ Added so Lambda includes SDK
     events:
       - http:
           path: auth
           method: post
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
-            methods:
-              - OPTIONS
-              - POST
+          cors: true
 
-  # --- Register ---
+  # --- 🧩 Register ---
   register:
     handler: src/handlers/register.handler
+    package:
+      individually: true
+      patterns:
+        - src/handlers/register.js
+        - node_modules/bcryptjs/**
+        - node_modules/jsonwebtoken/**
+        - node_modules/aws-sdk/**    # ✅ Added
     events:
       - http:
           path: auth/register
           method: post
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
-            methods:
-              - OPTIONS
-              - POST
+          cors: true
 
-  # --- Members ---
+  # --- 👥 Members ---
   members:
     handler: src/handlers/members.handler
     events:
@@ -129,7 +137,7 @@ functions:
           method: any
           cors: true
 
-  # --- Messages ---
+  # --- 💬 Messages ---
   messages:
     handler: src/handlers/messages.handler
     events:
@@ -142,7 +150,7 @@ functions:
           method: any
           cors: true
 
-  # --- Groups ---
+  # --- 👨‍👩‍👧 Groups ---
   groups:
     handler: src/handlers/groups.handler
     events:
@@ -151,52 +159,29 @@ functions:
           method: any
           cors: true
 
-  # --- Files (Legacy Upload) ---
-  files:
-    handler: src/handlers/files.handler
-    events:
-      - http:
-          path: files
-          method: post
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
-
-  # --- Pre-signed Upload URL ---
+  # --- 📤 Pre-signed Upload ---
   presignUpload:
     handler: src/handlers/presignUpload.handler
     events:
       - http:
           path: presign-upload
           method: post
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: true
 
-  # --- Attachments (Download) ---
+  # --- 📎 Get Attachment ---
   getAttachment:
     handler: src/handlers/getAttachment.handler
     events:
       - http:
           path: attachments
           method: get
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-            allowCredentials: false
+          cors: true
           request:
             parameters:
               querystrings:
                 key: true
 
-  # --- Typing Indicators ---
+  # --- ✍️ Typing Indicators ---
   typing:
     handler: src/handlers/typing.handler
     events:
