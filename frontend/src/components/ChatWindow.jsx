@@ -108,12 +108,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
     return () => clearInterval(interval);
   }, [activeUser]);
 
-  /* ----------------------------------------------------
-     AUTO-SCROLL
-  ---------------------------------------------------- */
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages]);
+  
 
   /* ----------------------------------------------------
      PRESIGNED UPLOAD

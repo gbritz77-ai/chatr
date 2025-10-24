@@ -3,6 +3,7 @@ frameworkVersion: '3'
 
 plugins:
   - serverless-dotenv-plugin
+  - serverless-esbuild
   - serverless-offline
 
 custom:
@@ -16,6 +17,16 @@ custom:
     ignoreJWTSignature: true
     corsAllowOrigin: "*"
     noPrependStageInUrl: false
+
+  # ✅ Esbuild Configuration (moved here)
+  esbuild:
+    bundle: true
+    minify: true
+    exclude: ['aws-sdk']
+    target: 'node20'
+    platform: 'node'
+    sourcemap: false
+    concurrency: 10
 
 provider:
   name: aws
@@ -91,21 +102,6 @@ functions:
             methods:
               - OPTIONS
               - POST
-      - http:
-          path: auth
-          method: options
-          integration: mock
-          request:
-            template:
-              application/json: '{"statusCode":200}'
-          response:
-            statusCodes:
-              200:
-                pattern: ''
-                headers:
-                  Access-Control-Allow-Origin: "'*'"
-                  Access-Control-Allow-Headers: "'Content-Type,Authorization'"
-                  Access-Control-Allow-Methods: "'OPTIONS,POST'"
 
   # --- Register ---
   register:
@@ -123,21 +119,6 @@ functions:
             methods:
               - OPTIONS
               - POST
-      - http:
-          path: auth/register
-          method: options
-          integration: mock
-          request:
-            template:
-              application/json: '{"statusCode":200}'
-          response:
-            statusCodes:
-              200:
-                pattern: ''
-                headers:
-                  Access-Control-Allow-Origin: "'*'"
-                  Access-Control-Allow-Headers: "'Content-Type,Authorization'"
-                  Access-Control-Allow-Methods: "'OPTIONS,POST'"
 
   # --- Members ---
   members:
@@ -183,26 +164,8 @@ functions:
               - Content-Type
               - Authorization
             allowCredentials: false
-            methods:
-              - OPTIONS
-              - POST
-      - http:
-          path: files
-          method: options
-          integration: mock
-          request:
-            template:
-              application/json: '{"statusCode":200}'
-          response:
-            statusCodes:
-              200:
-                pattern: ''
-                headers:
-                  Access-Control-Allow-Origin: "'*'"
-                  Access-Control-Allow-Headers: "'Content-Type,Authorization'"
-                  Access-Control-Allow-Methods: "'OPTIONS,POST'"
 
-  # --- ✅ Pre-signed Upload URL (Fixed Indentation) ---
+  # --- Pre-signed Upload URL ---
   presignUpload:
     handler: src/handlers/presignUpload.handler
     events:
