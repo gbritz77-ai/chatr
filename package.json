@@ -1,7 +1,7 @@
 {
   "name": "chatr",
   "version": "1.0.0",
-  "description": "",
+  "description": "��#\u0000 \u0000c\u0000h\u0000a\u0000t\u0000r\u0000\r\u0000 \u0000",
   "main": "index.js",
   "directories": {
     "doc": "docs",
@@ -18,13 +18,23 @@
     "aws-sdk": "^2.1692.0",
     "bcryptjs": "^3.0.2",
     "jsonwebtoken": "^9.0.2",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.546.0",
-    "react-router-dom": "^7.9.4"
+    "react-router-dom": "^7.9.4",
+    "sharp": "^0.34.4"
   },
   "devDependencies": {
     "dotenv-cli": "^10.0.0",
     "serverless": "^3.40.0",
     "serverless-dotenv-plugin": "^6.0.0",
     "serverless-offline": "^13.6.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gbritz77-ai/chatr.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gbritz77-ai/chatr/issues"
+  },
+  "homepage": "https://github.com/gbritz77-ai/chatr#readme"
 }
