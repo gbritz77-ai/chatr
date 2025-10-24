@@ -3,15 +3,17 @@ import { postJSON, getJSON } from "../lib/api";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
 import { Avatar } from "../components/Avatar";
-import { Send, Smile, Paperclip, Loader2, FileText, AlertTriangle, ArrowDown } from "lucide-react";
+import GifPicker from "../components/GifPicker";
+import { Send, Smile, Paperclip, Loader2, FileText, AlertTriangle, ArrowDown, Image } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — Sticky Input + Signed URLs + Smart Auto-Scroll + Scroll-to-Bottom Button
+   💬 ChatWindow — Sticky Input + Signed URLs + GIF Picker + Smart Auto-Scroll
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
   const [messages, setMessages] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
   const [attachment, setAttachment] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -220,6 +222,26 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
+     SEND GIF MESSAGE
+  ---------------------------------------------------- */
+  async function sendGifMessage(gifUrl) {
+    try {
+      const payload =
+        activeUser.type === "group"
+          ? { sender: currentUser, groupid: activeUser.id, attachmentKey: gifUrl, attachmentType: "image/gif" }
+          : { sender: currentUser, recipient: activeUser.username, attachmentKey: gifUrl, attachmentType: "image/gif" };
+
+      await postJSON("/messages", payload);
+      await loadMessages();
+      await markAsRead();
+      scrollToBottom();
+    } catch (err) {
+      console.error("❌ Failed to send GIF:", err);
+      alert("Failed to send GIF: " + err.message);
+    }
+  }
+
+  /* ----------------------------------------------------
      RENDER MESSAGES
   ---------------------------------------------------- */
   function renderBubble(msg) {
@@ -298,11 +320,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       </div>
 
       {/* Messages */}
-      <div
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-5 space-y-4"
-      >
+      <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-5 space-y-4">
         {activeUser ? (
           messages.length ? (
             messages.map(renderBubble)
@@ -337,20 +355,44 @@ export default function ChatWindow({ activeUser, currentUser }) {
       {activeUser && (
         <div className="sticky bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-inner px-6 py-3">
           <form onSubmit={sendMessage} className="flex items-center gap-3">
+            {/* Emoji Button */}
             <button
               type="button"
-              onClick={() => setShowEmojiPicker((p) => !p)}
-              className={`p-2 rounded-full transition ${showEmojiPicker ? "text-blue-600 bg-blue-50" : "text-slate-500 hover:text-blue-600 hover:bg-slate-100"}`}
+              onClick={() => {
+                setShowEmojiPicker((p) => !p);
+                setShowGifPicker(false);
+              }}
+              className={`p-2 rounded-full transition ${
+                showEmojiPicker ? "text-blue-600 bg-blue-50" : "text-slate-500 hover:text-blue-600 hover:bg-slate-100"
+              }`}
               title="Insert emoji"
             >
               <Smile className="w-5 h-5" />
             </button>
 
+            {/* GIF Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowGifPicker((p) => !p);
+                setShowEmojiPicker(false);
+              }}
+              className={`p-2 rounded-full transition ${
+                showGifPicker ? "text-blue-600 bg-blue-50" : "text-slate-500 hover:text-blue-600 hover:bg-slate-100"
+              }`}
+              title="Add GIF"
+            >
+              <Image className="w-5 h-5" />
+            </button>
+
+            {/* Pickers */}
             {showEmojiPicker && (
               <div ref={pickerRef} className="absolute bottom-20 left-6 z-50 shadow-xl border rounded-lg bg-white">
                 <Picker data={data} theme="light" onEmojiSelect={(emoji) => setText((t) => t + emoji.native)} />
               </div>
             )}
+
+            {showGifPicker && <GifPicker onSelect={(gifUrl) => { setShowGifPicker(false); sendGifMessage(gifUrl); }} />}
 
             <label title="Attach file" className="p-2 rounded-full cursor-pointer text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition">
               <Paperclip className="w-5 h-5" />
