@@ -10,7 +10,7 @@ const MEMBERS_TABLE = process.env.MEMBERS_TABLE || "chatr-members";
 const ATTACHMENTS_BUCKET = process.env.ATTACHMENTS_BUCKET || "outsec-chat-bucket";
 
 /* ===========================================================
-   🔧 Common JSON Response Helper
+   🔧 Response Helper
 =========================================================== */
 const response = (statusCode, body) => ({
   statusCode,
@@ -59,7 +59,7 @@ async function getSignedUrl(key) {
 }
 
 /* ===========================================================
-   🧩 Helper: Build Chat ID (UserA <-> UserB)
+   🧩 Helper: Build Chat ID (userA <-> userB)
 =========================================================== */
 function buildChatId(userA, userB) {
   return [userA, userB].sort().join("#");
@@ -78,7 +78,7 @@ exports.handler = async (event) => {
 
   try {
     /* ===========================================================
-       📨 POST /messages  → Send message
+       📨 POST /messages → Send message
     =========================================================== */
     if (method === "POST" && path.endsWith("/messages")) {
       const {
@@ -123,20 +123,21 @@ exports.handler = async (event) => {
 
     /* ===========================================================
        💬 GET /messages?userA=&userB=
+       (Hybrid — supports old messages without chatId)
     =========================================================== */
     if (method === "GET" && params.userA && params.userB) {
       const { userA, userB } = params;
       const chatId = buildChatId(userA, userB);
 
-      const result = await dynamodb
-        .scan({
-          TableName: TABLE_NAME,
-          FilterExpression: "chatId = :cid",
-          ExpressionAttributeValues: { ":cid": chatId },
-        })
-        .promise();
+      const result = await dynamodb.scan({ TableName: TABLE_NAME }).promise();
+      const messages =
+        result.Items?.filter(
+          (m) =>
+            m.chatId === chatId ||
+            (m.sender === userA && m.recipient === userB) ||
+            (m.sender === userB && m.recipient === userA)
+        ) || [];
 
-      const messages = result.Items || [];
       messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
       for (const msg of messages) {
@@ -154,16 +155,9 @@ exports.handler = async (event) => {
     =========================================================== */
     if (method === "GET" && params.groupid) {
       const { groupid } = params;
+      const result = await dynamodb.scan({ TableName: TABLE_NAME }).promise();
+      const messages = result.Items?.filter((m) => m.groupid === groupid) || [];
 
-      const result = await dynamodb
-        .scan({
-          TableName: TABLE_NAME,
-          FilterExpression: "groupid = :gid",
-          ExpressionAttributeValues: { ":gid": groupid },
-        })
-        .promise();
-
-      const messages = result.Items || [];
       messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
       for (const msg of messages) {
@@ -178,6 +172,7 @@ exports.handler = async (event) => {
 
     /* ===========================================================
        🔢 GET /messages/unread-counts?username=
+       Returns per-chat unread counts for sidebar badges
     =========================================================== */
     if (method === "GET" && path.endsWith("/messages/unread-counts")) {
       const username = params.username;
@@ -185,11 +180,26 @@ exports.handler = async (event) => {
         return response(400, { success: false, message: "username required" });
 
       const result = await dynamodb.scan({ TableName: TABLE_NAME }).promise();
-      const unread = result.Items?.filter(
-        (m) => m.recipient === username && !m.read
-      ).length;
 
-      return response(200, { success: true, unreadCount: unread || 0 });
+      // 🔍 Count unread messages per chat/group
+      const counts = {};
+      for (const msg of result.Items || []) {
+        const chatKey = msg.groupid
+          ? `GROUP#${msg.groupid}`
+          : `CHAT#${[msg.sender, msg.recipient].sort().join("#")}`;
+
+        if (!msg.read && msg.recipient === username) {
+          counts[chatKey] = (counts[chatKey] || 0) + 1;
+        }
+      }
+
+      // Convert map → array
+      const unreadArray = Object.entries(counts).map(([chatId, unreadCount]) => ({
+        chatId,
+        unreadCount,
+      }));
+
+      return response(200, unreadArray);
     }
 
     /* ===========================================================
@@ -204,12 +214,16 @@ exports.handler = async (event) => {
         });
 
       const result = await dynamodb.scan({ TableName: TABLE_NAME }).promise();
+
       const unreadMessages =
         result.Items?.filter(
           (m) =>
             !m.read &&
-            ((m.recipient === username && m.chatId === chatId) ||
-              (m.groupid && m.groupid === chatId))
+            ((m.recipient === username &&
+              (m.chatId === chatId ||
+                chatId.includes(m.sender) ||
+                chatId.includes(m.groupid))) ||
+              (m.groupid && chatId === `GROUP#${m.groupid}`))
         ) || [];
 
       for (const msg of unreadMessages) {
@@ -231,7 +245,7 @@ exports.handler = async (event) => {
     }
 
     /* ===========================================================
-       ❌ Invalid path
+       ❌ Invalid Path
     =========================================================== */
     return response(404, { success: false, message: "Invalid path or method" });
   } catch (err) {

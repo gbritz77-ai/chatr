@@ -306,7 +306,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-4 pb-[160px]">
+      <div className="flex-1 overflow-y-auto p-5 space-y-4 pb-[200px] sm:pb-[180px] md:pb-[160px]">
         {activeUser ? (
           messages.length ? (
             messages.map(renderBubble)
