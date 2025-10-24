@@ -4,38 +4,63 @@ export default function GifPicker({ onSelect }) {
   const [search, setSearch] = useState("funny");
   const [gifs, setGifs] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // ✅ Giphy API Key from .env
   const API_KEY = import.meta.env.VITE_GIPHY_API_KEY;
 
+  // ======================================================
+  // 🧠 Fetch GIFs (either search or trending fallback)
+  // ======================================================
   async function fetchGifs(query) {
     if (!API_KEY) {
-      console.error("🚨 Missing Giphy API key");
+      console.error("🚨 Missing Giphy API key — check your .env file!");
+      setGifs([]);
       return;
     }
+
     setLoading(true);
+
     try {
-      const res = await fetch(
-        `https://api.giphy.com/v1/gifs/search?api_key=${API_KEY}&q=${encodeURIComponent(
-          query
-        )}&limit=24&rating=g`
-      );
+      // If there's no search query, load trending GIFs
+      const endpoint =
+        query && query.trim().length > 0
+          ? `https://api.giphy.com/v1/gifs/search?api_key=${API_KEY}&q=${encodeURIComponent(
+              query
+            )}&limit=24&rating=g`
+          : `https://api.giphy.com/v1/gifs/trending?api_key=${API_KEY}&limit=24&rating=g`;
+
+      const res = await fetch(endpoint);
       const data = await res.json();
-      setGifs(data.data || []);
+
+      if (!data?.data) throw new Error("No GIF data returned");
+      setGifs(data.data);
     } catch (err) {
       console.error("❌ GIF fetch error:", err);
+      setGifs([]);
     } finally {
       setLoading(false);
     }
   }
 
+  // ======================================================
+  // 🚀 Load trending GIFs initially
+  // ======================================================
   useEffect(() => {
+    console.log("🔑 Loaded Giphy API key:", API_KEY);
     fetchGifs(search);
   }, []);
 
+  // ======================================================
+  // 🔍 Handle search
+  // ======================================================
   function handleSearch(e) {
     e.preventDefault();
     fetchGifs(search);
   }
 
+  // ======================================================
+  // 🧱 UI
+  // ======================================================
   return (
     <div className="absolute bottom-20 left-6 z-50 shadow-xl border rounded-lg bg-white w-[340px] p-3">
       <form onSubmit={handleSearch} className="flex gap-2 mb-3">
@@ -67,7 +92,9 @@ export default function GifPicker({ onSelect }) {
             />
           ))
         ) : (
-          <p className="text-center text-slate-400 col-span-3">No GIFs found</p>
+          <p className="text-center text-slate-400 col-span-3">
+            No GIFs found
+          </p>
         )}
       </div>
     </div>
