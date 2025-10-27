@@ -1,10 +1,19 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { postJSON, getJSON } from "../lib/api";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
 import { Avatar } from "../components/Avatar";
 import GifPicker from "../components/GifPicker";
-import { Send, Smile, Paperclip, Loader2, FileText, AlertTriangle, ArrowDown, Image } from "lucide-react";
+import {
+  Send,
+  Smile,
+  Paperclip,
+  Loader2,
+  FileText,
+  AlertTriangle,
+  ArrowDown,
+  Image,
+} from "lucide-react";
 
 /* ============================================================
    💬 ChatWindow — Sticky Input + Signed URLs + GIF Picker + Smart Auto-Scroll
@@ -40,9 +49,13 @@ export default function ChatWindow({ activeUser, currentUser }) {
     try {
       let url = "";
       if (activeUser.type === "group") {
-        url = `/messages?groupid=${encodeURIComponent(activeUser.id)}&username=${encodeURIComponent(currentUser)}`;
+        url = `/messages?groupid=${encodeURIComponent(activeUser.id)}&username=${encodeURIComponent(
+          currentUser
+        )}`;
       } else if (activeUser.type === "user") {
-        url = `/messages?userA=${encodeURIComponent(currentUser)}&userB=${encodeURIComponent(activeUser.username)}`;
+        url = `/messages?userA=${encodeURIComponent(currentUser)}&userB=${encodeURIComponent(
+          activeUser.username
+        )}`;
       }
 
       const res = await getJSON(url);

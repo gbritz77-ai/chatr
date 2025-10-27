@@ -1,7 +1,10 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import Sidebar from "../components/Sidebar";
 import ChatWindow from "../components/ChatWindow";
 
+/* ==========================================================
+   💬 Messages Page
+========================================================== */
 export default function Messages() {
   const [activeUser, setActiveUser] = useState(null);
   const currentUser = localStorage.getItem("username") || "Anonymous";
