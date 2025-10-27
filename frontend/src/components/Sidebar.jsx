@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getMembers, getJSON } from "../lib/api";
 import { Avatar } from "./Avatar";
-import { LogOut, Users, MessageSquare, Settings, Trash2 } from "lucide-react";
+import { LogOut, Users, Settings, Trash2 } from "lucide-react";
 
 export default function Sidebar({ onSelectUser, currentUser }) {
   const [members, setMembers] = useState([]);
@@ -24,12 +24,15 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     async function loadMembers() {
       try {
         const res = await getMembers();
-        if (res?.members)
-          setMembers(
-            res.members.filter(
-              (m) => m.userid !== currentUser && m.profileName !== profileName
-            )
+        if (res?.members) {
+          // ✅ Show all except yourself
+          const filtered = res.members.filter(
+            (m) =>
+              m.userid !== currentUser &&
+              m.profileName?.toLowerCase() !== profileName?.toLowerCase()
           );
+          setMembers(filtered);
+        }
       } catch (err) {
         console.error("❌ Failed to fetch members:", err);
       }
@@ -44,14 +47,15 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     if (!currentUser) return;
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_API_BASE}/groups?username=${encodeURIComponent(
-          currentUser
-        )}`
+        `${import.meta.env.VITE_API_BASE}/groups?username=${encodeURIComponent(currentUser)}`
       );
       const data = await res.json();
-      if (data?.success && Array.isArray(data.groups || data.data))
+      if (data?.success && Array.isArray(data.groups || data.data)) {
         setGroups(data.groups || data.data);
-      else setGroups([]);
+      } else {
+        console.warn("⚠️ Unexpected groups format:", data);
+        setGroups([]);
+      }
     } catch (err) {
       console.error("❌ Failed to fetch groups:", err);
     }
@@ -59,6 +63,8 @@ export default function Sidebar({ onSelectUser, currentUser }) {
 
   useEffect(() => {
     loadGroups();
+    const interval = setInterval(loadGroups, 10000); // auto-refresh groups every 10s
+    return () => clearInterval(interval);
   }, [currentUser]);
 
   /* =========================================================
@@ -122,9 +128,12 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         setGroupName("");
         setSelectedMembers([]);
         await loadGroups();
-      } else alert("❌ Failed to create group.");
+      } else {
+        alert(`❌ ${data.message || "Failed to create group."}`);
+      }
     } catch (err) {
       console.error("❌ Error creating group:", err);
+      alert("Server error creating group");
     }
   };
 
@@ -132,6 +141,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
      Manage Group (Add / Remove / Delete)
   ========================================================= */
   async function handleAddMember(username) {
+    if (!username) return;
     try {
       const res = await fetch(`${import.meta.env.VITE_API_BASE}/groups/add`, {
         method: "PUT",
@@ -178,7 +188,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       !confirm(`Are you sure you want to delete "${selectedGroup.groupName}"?`)
     )
       return;
-
     try {
       const res = await fetch(`${import.meta.env.VITE_API_BASE}/groups/delete`, {
         method: "DELETE",
@@ -202,6 +211,10 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   /* =========================================================
      Render
   ========================================================= */
+  const filteredGroups = groups.filter((g) =>
+    g.groupName?.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <aside className="fixed top-0 left-0 bottom-0 w-[320px] bg-white border-r border-slate-200 flex flex-col z-20">
       {/* Header */}
@@ -252,9 +265,9 @@ export default function Sidebar({ onSelectUser, currentUser }) {
             </button>
           </div>
 
-          {groups.length ? (
+          {filteredGroups.length ? (
             <div className="space-y-2">
-              {groups.map((g) => {
+              {filteredGroups.map((g) => {
                 const key = `GROUP#${g.groupid}`;
                 const unread = unreadMap[key] || 0;
                 const isCreator = g.creator === currentUser;
@@ -315,9 +328,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
             <p className="text-slate-400 text-sm italic">No groups yet</p>
           )}
         </div>
-
-        {/* Members List (unchanged) */}
-        {/* ... same as before ... */}
       </div>
 
       {/* Group Management Modal */}
