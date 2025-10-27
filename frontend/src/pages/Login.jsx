@@ -1,9 +1,11 @@
-// src/pages/Login.jsx
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { postJSON } from "../lib/api";
 import { Eye, EyeOff } from "lucide-react";
 
+/* ==========================================================
+   🔐 Login Page
+========================================================== */
 export default function Login() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ username: "", password: "" });
@@ -21,6 +23,7 @@ export default function Login() {
 
     try {
       const res = await postJSON("/auth", form);
+
       if (res?.success && res?.token) {
         localStorage.setItem("token", res.token);
         localStorage.setItem("username", form.username);

@@ -1,9 +1,11 @@
-// src/pages/Register.jsx
-import { useState } from "react";
+import React, { useState } from "react";
 import { postJSON, getJSON } from "../lib/api";
 import { Eye, EyeOff } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
+/* ==========================================================
+   🧾 Register Page
+========================================================== */
 export default function Register() {
   const [username, setUsername] = useState("");
   const [profileName, setProfileName] = useState("");
@@ -50,7 +52,6 @@ export default function Register() {
       return setError("Please fill in all required fields.");
 
     const emailRegex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
-
     if (!emailRegex.test(username))
       return setError("Please enter a valid email address.");
 
