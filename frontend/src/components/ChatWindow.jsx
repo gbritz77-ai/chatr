@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — Sticky Input + Signed URLs + GIF Picker + Smart Auto-Scroll
+   💬 ChatWindow — Fixed Chat ID Normalization + Debugging
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -42,24 +42,40 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const S3_BUCKET_URL = "https://outsec-chat-bucket.s3.eu-west-2.amazonaws.com";
 
   /* ----------------------------------------------------
+     🧩 Helper: Normalized Chat ID
+  ---------------------------------------------------- */
+  function getChatId(userA, userB) {
+    const sorted = [userA, userB].sort((a, b) =>
+      a.toLowerCase().localeCompare(b.toLowerCase())
+    );
+    return `CHAT#${sorted[0]}#${sorted[1]}`;
+  }
+
+  /* ----------------------------------------------------
      LOAD MESSAGES
   ---------------------------------------------------- */
   async function loadMessages() {
     if (!activeUser || !currentUser) return;
     try {
       let url = "";
+
       if (activeUser.type === "group") {
-        url = `/messages?groupid=${encodeURIComponent(activeUser.id)}&username=${encodeURIComponent(
-          currentUser
-        )}`;
+        url = `/messages?groupid=${encodeURIComponent(
+          activeUser.id
+        )}&username=${encodeURIComponent(currentUser)}`;
       } else if (activeUser.type === "user") {
-        url = `/messages?userA=${encodeURIComponent(currentUser)}&userB=${encodeURIComponent(
-          activeUser.username
+        // FIXED: use .id and normalized chatId
+        const chatId = getChatId(currentUser, activeUser.id);
+        url = `/messages?chatId=${encodeURIComponent(chatId)}&username=${encodeURIComponent(
+          currentUser
         )}`;
       }
 
+      console.log("💬 [ChatWindow] Fetching messages:", url);
       const res = await getJSON(url);
-      setMessages(res?.messages || []);
+      const msgs = res?.messages || [];
+      console.log(`📦 Loaded ${msgs.length} messages for`, activeUser);
+      setMessages(msgs);
     } catch (err) {
       console.error("❌ Failed to load messages:", err);
     }
@@ -80,8 +96,10 @@ export default function ChatWindow({ activeUser, currentUser }) {
     try {
       const chatId =
         activeUser.type === "group"
-          ? activeUser.id
-          : `${[activeUser.username, currentUser].sort().join("#")}`;
+          ? `GROUP#${activeUser.id}`
+          : getChatId(currentUser, activeUser.id);
+
+      console.log("📨 Marking chat as read:", chatId);
       await postJSON("/messages/mark-read", { chatId, username: currentUser });
       setLastReadTimestamp(new Date().toISOString());
     } catch (err) {
@@ -90,14 +108,14 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
-     PRESENCE + TYPING (Simulated)
+     PRESENCE + TYPING
   ---------------------------------------------------- */
   useEffect(() => {
     const interval = setInterval(() => {
-      if (activeUser?.username) {
+      if (activeUser?.id) {
         setOnlineUsers((prev) => ({
           ...prev,
-          [activeUser.username]: Math.random() > 0.2,
+          [activeUser.id]: Math.random() > 0.2,
         }));
       }
     }, 5000);
@@ -117,16 +135,8 @@ export default function ChatWindow({ activeUser, currentUser }) {
     }, 2000);
   }
 
-  useEffect(() => {
-    if (!activeUser) return;
-    const interval = setInterval(() => {
-      setRemoteTyping(Math.random() > 0.85);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [activeUser]);
-
   /* ----------------------------------------------------
-     AUTO-SCROLL + SCROLL TO BOTTOM BUTTON
+     AUTO-SCROLL
   ---------------------------------------------------- */
   function handleScroll() {
     const el = scrollContainerRef.current;
@@ -136,9 +146,8 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   useEffect(() => {
-    if (autoScrollEnabled) {
+    if (autoScrollEnabled)
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    }
   }, [messages]);
 
   useEffect(() => {
@@ -154,51 +163,6 @@ export default function ChatWindow({ activeUser, currentUser }) {
   };
 
   /* ----------------------------------------------------
-     PRESIGNED UPLOAD
-  ---------------------------------------------------- */
-  async function getPresignedUrl(file) {
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE}/presign-upload`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, type: file.type }),
-      });
-      const data = await res.json();
-      if (!data.success || !data.uploadURL) throw new Error("Presign failed");
-      return data;
-    } catch (err) {
-      console.error("❌ Presign error:", err);
-      throw err;
-    }
-  }
-
-  async function uploadToS3(file, presignedUrl) {
-    setUploading(true);
-    setUploadProgress(0);
-
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", presignedUrl, true);
-      xhr.setRequestHeader("Content-Type", file.type);
-
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
-      };
-
-      xhr.onload = () => {
-        setUploading(false);
-        xhr.status === 200 ? resolve() : reject(new Error(`S3 upload failed (${xhr.status})`));
-      };
-      xhr.onerror = (err) => {
-        setUploading(false);
-        reject(err);
-      };
-
-      xhr.send(file);
-    });
-  }
-
-  /* ----------------------------------------------------
      SEND MESSAGE
   ---------------------------------------------------- */
   async function sendMessage(e) {
@@ -210,17 +174,38 @@ export default function ChatWindow({ activeUser, currentUser }) {
       let fileType = null;
 
       if (attachment) {
-        const presign = await getPresignedUrl(attachment);
-        await uploadToS3(attachment, presign.uploadURL);
-        fileKey = presign.fileKey;
+        const presign = await fetch(
+          `${import.meta.env.VITE_API_BASE}/presign-upload`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: attachment.name, type: attachment.type }),
+          }
+        );
+        const data = await presign.json();
+        await fetch(data.uploadURL, { method: "PUT", body: attachment });
+        fileKey = data.fileKey;
         fileType = attachment.type;
       }
 
       const payload =
         activeUser.type === "group"
-          ? { sender: currentUser, groupid: activeUser.id, text, attachmentKey: fileKey, attachmentType: fileType }
-          : { sender: currentUser, recipient: activeUser.username, text, attachmentKey: fileKey, attachmentType: fileType };
+          ? {
+              sender: currentUser,
+              groupid: activeUser.id,
+              text,
+              attachmentKey: fileKey,
+              attachmentType: fileType,
+            }
+          : {
+              sender: currentUser,
+              recipient: activeUser.id,
+              text,
+              attachmentKey: fileKey,
+              attachmentType: fileType,
+            };
 
+      console.log("🚀 Sending message payload:", payload);
       await postJSON("/messages", payload);
       setText("");
       setAttachment(null);
@@ -235,76 +220,23 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
-     SEND GIF MESSAGE
-  ---------------------------------------------------- */
-  async function sendGifMessage(gifUrl) {
-    try {
-      const payload =
-        activeUser.type === "group"
-          ? { sender: currentUser, groupid: activeUser.id, attachmentKey: gifUrl, attachmentType: "image/gif" }
-          : { sender: currentUser, recipient: activeUser.username, attachmentKey: gifUrl, attachmentType: "image/gif" };
-
-      await postJSON("/messages", payload);
-      await loadMessages();
-      await markAsRead();
-      scrollToBottom();
-    } catch (err) {
-      console.error("❌ Failed to send GIF:", err);
-      alert("Failed to send GIF: " + err.message);
-    }
-  }
-
-  /* ----------------------------------------------------
      RENDER MESSAGES
   ---------------------------------------------------- */
   function renderBubble(msg) {
     const isMine = msg.sender === currentUser;
-    const senderName = isMine ? currentProfileName : msg.senderProfileName || msg.sender || "Unknown";
-    const time = new Date(msg.timestamp).toLocaleString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      day: "2-digit",
-      month: "short",
-    });
-
-    const isOnline = onlineUsers[msg.sender];
-    const isImage = msg.attachmentType?.startsWith("image/") || msg.attachmentKey?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
-    const fileUrl =
-      msg.attachmentUrl || msg.viewURL || (msg.attachmentKey ? `${S3_BUCKET_URL}/${msg.attachmentKey}` : null);
+    const senderName = isMine ? currentProfileName : msg.senderProfileName || msg.sender;
+    const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const fileUrl = msg.attachmentUrl || (msg.attachmentKey ? `${S3_BUCKET_URL}/${msg.attachmentKey}` : null);
+    const isImage = msg.attachmentType?.startsWith("image/");
 
     return (
       <div key={msg.messageid || `${msg.sender}-${msg.timestamp}`} className={`flex items-end gap-2 ${isMine ? "flex-row-reverse" : ""}`}>
-        <div className="relative">
-          <Avatar seed={senderName} username={senderName} size={10} style="micah" />
-          {isOnline && <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />}
-        </div>
-
+        <Avatar seed={senderName} username={senderName} size={10} style="micah" />
         <div className={`p-3 rounded-lg max-w-[70%] ${isMine ? "bg-blue-600 text-white ml-auto" : "bg-white border text-slate-800"}`}>
           {!isMine && <div className="text-xs font-semibold text-slate-500 mb-1">{senderName}</div>}
           {msg.text && <div className="whitespace-pre-wrap break-words">{msg.text}</div>}
-
-          {fileUrl && (
-            <div className="mt-2">
-              {isImage ? (
-                <img
-                  src={fileUrl}
-                  alt="attachment"
-                  className="max-h-64 rounded-lg border border-slate-300 object-contain cursor-pointer hover:opacity-90 transition"
-                  onError={() => setErrorUrl(fileUrl)}
-                />
-              ) : (
-                <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-100 hover:text-blue-300 underline">
-                  <FileText className="w-4 h-4" />
-                  <span>{msg.attachmentKey?.split("/").pop()}</span>
-                </a>
-              )}
-              {errorUrl === fileUrl && (
-                <div className="flex items-center gap-2 mt-2 text-xs text-red-400">
-                  <AlertTriangle className="w-4 h-4" />
-                  Link expired — reopen chat to refresh signed URL
-                </div>
-              )}
-            </div>
+          {fileUrl && isImage && (
+            <img src={fileUrl} alt="attachment" className="max-h-64 rounded-lg border mt-2 object-contain" />
           )}
           <div className={`text-xs mt-2 ${isMine ? "text-blue-200" : "text-slate-500"}`}>{time}</div>
         </div>
@@ -321,9 +253,14 @@ export default function ChatWindow({ activeUser, currentUser }) {
       <div className="sticky top-0 z-10 border-b bg-white/70 backdrop-blur-lg p-4 font-semibold text-slate-700 flex items-center gap-3">
         {activeUser ? (
           <>
-            <Avatar seed={activeUser.name || activeUser.username} username={activeUser.name || activeUser.username} size={10} style="micah" />
+            <Avatar
+              seed={activeUser.name || activeUser.id}
+              username={activeUser.name || activeUser.id}
+              size={10}
+              style="micah"
+            />
             <div>
-              <div>{activeUser.name || activeUser.username}</div>
+              <div>{activeUser.name || activeUser.id}</div>
               {remoteTyping && <div className="text-xs text-slate-500 animate-pulse">typing...</div>}
             </div>
           </>
@@ -341,84 +278,17 @@ export default function ChatWindow({ activeUser, currentUser }) {
             <p className="text-center text-slate-400 italic">No messages yet</p>
           )
         ) : (
-          <p className="text-center text-slate-400 italic mt-10">Select a contact or group to start chatting</p>
+          <p className="text-center text-slate-400 italic mt-10">
+            Select a contact or group to start chatting
+          </p>
         )}
         <div ref={messagesEndRef} />
       </div>
-
-      {/* 🪄 Scroll to Bottom Button */}
-      {!autoScrollEnabled && (
-        <button
-          onClick={scrollToBottom}
-          className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-3 shadow-lg transition"
-          title="Scroll to latest message"
-        >
-          <ArrowDown className="w-5 h-5" />
-        </button>
-      )}
-
-      {/* Upload Progress Bar */}
-      {uploading && (
-        <div className="absolute bottom-[70px] left-0 w-full bg-slate-200 h-1">
-          <div className="bg-blue-600 h-1 transition-all duration-200" style={{ width: `${uploadProgress}%` }}></div>
-        </div>
-      )}
 
       {/* Sticky Input Bar */}
       {activeUser && (
         <div className="sticky bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-inner px-6 py-3">
           <form onSubmit={sendMessage} className="flex items-center gap-3">
-            {/* Emoji Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setShowEmojiPicker((p) => !p);
-                setShowGifPicker(false);
-              }}
-              className={`p-2 rounded-full transition ${
-                showEmojiPicker ? "text-blue-600 bg-blue-50" : "text-slate-500 hover:text-blue-600 hover:bg-slate-100"
-              }`}
-              title="Insert emoji"
-            >
-              <Smile className="w-5 h-5" />
-            </button>
-
-            {/* GIF Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setShowGifPicker((p) => !p);
-                setShowEmojiPicker(false);
-              }}
-              className={`p-2 rounded-full transition ${
-                showGifPicker ? "text-blue-600 bg-blue-50" : "text-slate-500 hover:text-blue-600 hover:bg-slate-100"
-              }`}
-              title="Add GIF"
-            >
-              <Image className="w-5 h-5" />
-            </button>
-
-            {/* Pickers */}
-            {showEmojiPicker && (
-              <div ref={pickerRef} className="absolute bottom-20 left-6 z-50 shadow-xl border rounded-lg bg-white">
-                <Picker data={data} theme="light" onEmojiSelect={(emoji) => setText((t) => t + emoji.native)} />
-              </div>
-            )}
-
-            {showGifPicker && <GifPicker onSelect={(gifUrl) => { setShowGifPicker(false); sendGifMessage(gifUrl); }} />}
-
-            <label title="Attach file" className="p-2 rounded-full cursor-pointer text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition">
-              <Paperclip className="w-5 h-5" />
-              <input type="file" hidden onChange={(e) => e.target.files[0] && setAttachment(e.target.files[0])} />
-            </label>
-
-            {attachment && (
-              <span className="text-xs text-slate-500 truncate max-w-[200px]">
-                📎 {attachment.name}
-                {uploading && " (uploading...)"}
-              </span>
-            )}
-
             <input
               type="text"
               placeholder="Type a message..."
@@ -426,7 +296,6 @@ export default function ChatWindow({ activeUser, currentUser }) {
               onChange={handleTypingChange}
               className="flex-1 bg-transparent border-none focus:outline-none text-sm text-slate-700 px-2"
             />
-
             <button
               type="submit"
               disabled={uploading}
