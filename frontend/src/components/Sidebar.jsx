@@ -141,11 +141,15 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       if (Array.isArray(data)) {
         const map = {};
         for (const entry of data) map[entry.chatId] = entry.unreadCount;
-        console.table(map);
         setUnreadMap(map);
+      } else if (data?.success && typeof data.unreadCount === "number") {
+        // handle single-count object
+        setUnreadMap({ GLOBAL_TOTAL: data.unreadCount });
+        console.log("📦 Applied single unreadCount:", data.unreadCount);
       } else {
-        console.warn("⚠️ Unread response not array:", data);
+        console.warn("⚠️ Unexpected unread response shape:", data);
       }
+
     } catch (err) {
       console.error("❌ Failed to load unread counts:", err);
     } finally {
