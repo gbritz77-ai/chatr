@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { getMembers, getJSON } from "../lib/api";
+import { getMembers, getJSON, API_BASE } from "../lib/api";
 import { Avatar } from "./Avatar";
-import { LogOut, Users, Settings, Trash2 } from "lucide-react";
+import { LogOut, Users, Settings } from "lucide-react";
 
 export default function Sidebar({ onSelectUser, currentUser }) {
   const [members, setMembers] = useState([]);
@@ -22,48 +22,101 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   ========================================================= */
   useEffect(() => {
     async function loadMembers() {
+      console.group("🧩 Sidebar: loadMembers()");
+      console.time("⏱ Members fetch time");
+
       try {
+        console.log("🔸 Current user:", currentUser);
+        console.log("🔸 Stored profileName:", profileName);
         const res = await getMembers();
-        if (res?.members) {
-          // ✅ Show all except yourself
-          const filtered = res.members.filter(
-            (m) =>
-              m.userid !== currentUser &&
-              m.profileName?.toLowerCase() !== profileName?.toLowerCase()
-          );
-          setMembers(filtered);
+        console.log("📡 Raw getMembers() response:", res);
+
+        const parsed =
+          typeof res?.body === "string" ? JSON.parse(res.body) : res;
+        console.log("📦 Normalized response:", parsed);
+
+        let membersData = [];
+        if (Array.isArray(parsed)) {
+          membersData = parsed;
+          console.log("✅ Parsed as direct array of members");
+        } else if (Array.isArray(parsed?.members)) {
+          membersData = parsed.members;
+          console.log("✅ Using parsed.members");
+        } else if (Array.isArray(parsed?.data)) {
+          membersData = parsed.data;
+          console.log("✅ Using parsed.data");
+        } else {
+          console.warn("⚠️ Could not locate member list in response");
         }
+
+        console.table(membersData);
+
+        const filtered = membersData.filter(
+          (m) =>
+            m.userid !== currentUser &&
+            m.profileName?.toLowerCase() !== (profileName || "").toLowerCase()
+        );
+        console.log(`📋 Filtered members (${filtered.length}):`, filtered);
+
+        if (filtered.length === 0) {
+          console.warn("⚠️ No members after filtering — check user IDs / names");
+        }
+
+        // 👀 Expose global debug info
+        window.__debugMembers = { raw: membersData, filtered };
+
+        setMembers(filtered);
       } catch (err) {
         console.error("❌ Failed to fetch members:", err);
+      } finally {
+        console.timeEnd("⏱ Members fetch time");
+        console.groupEnd();
       }
     }
-    loadMembers();
-  }, [currentUser]);
+
+    if (currentUser) loadMembers();
+  }, [currentUser, profileName]);
 
   /* =========================================================
      Load Groups
   ========================================================= */
   async function loadGroups() {
-    if (!currentUser) return;
+    console.group("🧩 Sidebar: loadGroups()");
+    console.time("⏱ Groups fetch time");
+    if (!currentUser) {
+      console.warn("⚠️ Skipping group load: no currentUser yet");
+      console.groupEnd();
+      return;
+    }
     try {
+      console.log("🔸 Fetching groups for:", currentUser);
       const res = await fetch(
-        `${import.meta.env.VITE_API_BASE}/groups?username=${encodeURIComponent(currentUser)}`
+        `${API_BASE}/groups?username=${encodeURIComponent(currentUser)}`
       );
-      const data = await res.json();
-      if (data?.success && Array.isArray(data.groups || data.data)) {
-        setGroups(data.groups || data.data);
+      const raw = await res.json();
+      const data = typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
+      console.log("📦 Groups API raw:", raw);
+      console.log("📦 Groups API normalized:", data);
+
+      if (data?.success) {
+        const list = data.groups || data.data || data.items || [];
+        console.table(list);
+        setGroups(Array.isArray(list) ? list : []);
       } else {
         console.warn("⚠️ Unexpected groups format:", data);
         setGroups([]);
       }
     } catch (err) {
       console.error("❌ Failed to fetch groups:", err);
+    } finally {
+      console.timeEnd("⏱ Groups fetch time");
+      console.groupEnd();
     }
   }
 
   useEffect(() => {
     loadGroups();
-    const interval = setInterval(loadGroups, 10000); // auto-refresh groups every 10s
+    const interval = setInterval(loadGroups, 10000);
     return () => clearInterval(interval);
   }, [currentUser]);
 
@@ -71,20 +124,32 @@ export default function Sidebar({ onSelectUser, currentUser }) {
      Unread Counts
   ========================================================= */
   async function loadUnreadCounts() {
-    if (!currentUser) return;
+    console.group("📨 Sidebar: loadUnreadCounts()");
+    if (!currentUser) {
+      console.warn("⚠️ No currentUser for unread counts");
+      console.groupEnd();
+      return;
+    }
+
     try {
       const res = await getJSON(
         `/messages/unread-counts?username=${encodeURIComponent(currentUser)}`
       );
-      if (Array.isArray(res)) {
+      const data = typeof res?.body === "string" ? JSON.parse(res.body) : res;
+      console.log("📦 Unread response:", data);
+
+      if (Array.isArray(data)) {
         const map = {};
-        for (const entry of res) {
-          map[entry.chatId] = entry.unreadCount;
-        }
+        for (const entry of data) map[entry.chatId] = entry.unreadCount;
+        console.table(map);
         setUnreadMap(map);
+      } else {
+        console.warn("⚠️ Unread response not array:", data);
       }
     } catch (err) {
       console.error("❌ Failed to load unread counts:", err);
+    } finally {
+      console.groupEnd();
     }
   }
 
@@ -98,6 +163,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
      Create Group
   ========================================================= */
   const toggleMember = (username) => {
+    console.log("🔄 toggleMember:", username);
     setSelectedMembers((prev) =>
       prev.includes(username)
         ? prev.filter((m) => m !== username)
@@ -106,13 +172,17 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   };
 
   const handleCreateGroup = async () => {
+    console.group("➕ CreateGroup()");
+    console.log("📋 Selected members:", selectedMembers);
+    console.log("📋 Group name:", groupName);
+
     if (!groupName.trim()) return alert("Please enter a group name.");
     const membersToAdd = Array.from(new Set([...selectedMembers, currentUser]));
     if (membersToAdd.length < 2)
       return alert("A group must have at least 2 members.");
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE}/groups`, {
+      const res = await fetch(`${API_BASE}/groups`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -121,7 +191,9 @@ export default function Sidebar({ onSelectUser, currentUser }) {
           members: membersToAdd,
         }),
       });
-      const data = await res.json();
+      const raw = await res.json();
+      const data = typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
+      console.log("📦 Create group response:", data);
       if (data.success) {
         alert(`✅ Group "${groupName}" created!`);
         setShowModal(false);
@@ -134,79 +206,10 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     } catch (err) {
       console.error("❌ Error creating group:", err);
       alert("Server error creating group");
+    } finally {
+      console.groupEnd();
     }
   };
-
-  /* =========================================================
-     Manage Group (Add / Remove / Delete)
-  ========================================================= */
-  async function handleAddMember(username) {
-    if (!username) return;
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE}/groups/add`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          groupid: selectedGroup.groupid,
-          username,
-          requester: currentUser,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert(`✅ ${username} added to group.`);
-        await loadGroups();
-      } else alert(`❌ ${data.message || "Failed to add member"}`);
-    } catch (err) {
-      console.error("❌ Error adding member:", err);
-    }
-  }
-
-  async function handleRemoveMember(username) {
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE}/groups/remove`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          groupid: selectedGroup.groupid,
-          username,
-          requester: currentUser,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert(`✅ ${username} removed from group.`);
-        await loadGroups();
-      } else alert(`❌ ${data.message || "Failed to remove member"}`);
-    } catch (err) {
-      console.error("❌ Error removing member:", err);
-    }
-  }
-
-  async function handleDeleteGroup() {
-    if (
-      !confirm(`Are you sure you want to delete "${selectedGroup.groupName}"?`)
-    )
-      return;
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE}/groups/delete`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          groupid: selectedGroup.groupid,
-          requester: currentUser,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert("🗑️ Group deleted successfully.");
-        setManageModal(false);
-        await loadGroups();
-      } else alert(`❌ ${data.message || "Failed to delete group"}`);
-    } catch (err) {
-      console.error("❌ Error deleting group:", err);
-    }
-  }
 
   /* =========================================================
      Render
@@ -215,8 +218,15 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     g.groupName?.toLowerCase().includes(search.toLowerCase())
   );
 
+  console.debug("🧠 Sidebar Render State", {
+    currentUser,
+    membersCount: members.length,
+    groupsCount: groups.length,
+    unreadKeys: Object.keys(unreadMap).length,
+  });
+
   return (
-    <aside className="fixed top-0 left-0 bottom-0 w-[320px] bg-white border-r border-slate-200 flex flex-col z-20">
+    <aside className="fixed top-0 left-0 bottom-0 w-[320px] bg-white border-r border-slate-200 flex flex-col z-20 relative">
       {/* Header */}
       <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between relative">
         <div className="flex flex-col items-center justify-center w-full">
@@ -249,7 +259,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         />
       </div>
 
-      {/* Scrollable Area */}
+      {/* Scrollable */}
       <div className="flex-1 overflow-y-auto">
         {/* Groups */}
         <div className="px-4 py-3 border-b border-slate-100">
@@ -276,7 +286,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                   <div key={g.groupid} className="flex items-center">
                     <button
                       onClick={() => {
-                        const key = `GROUP#${g.groupid}`;
+                        console.log("💬 Selected group:", g);
                         setActiveChat(`group-${g.groupid}`);
                         setUnreadMap((prev) => ({ ...prev, [key]: 0 }));
                         onSelectUser({
@@ -330,74 +340,16 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         </div>
       </div>
 
-      {/* Group Management Modal */}
-      {manageModal && selectedGroup && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg w-96 p-6">
-            <h2 className="text-lg font-semibold mb-3">
-              Manage Group: {selectedGroup.groupName}
-            </h2>
-
-            <div className="mb-4">
-              <p className="text-sm font-medium text-gray-700 mb-1">
-                Current Members:
-              </p>
-              <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg p-2">
-                {selectedGroup.members?.map((m) => (
-                  <div
-                    key={m}
-                    className="flex justify-between items-center py-1 px-2 hover:bg-gray-50 rounded"
-                  >
-                    <span className="text-sm">{m}</span>
-                    {m !== currentUser && (
-                      <button
-                        onClick={() => handleRemoveMember(m)}
-                        className="text-xs text-red-500 hover:underline"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <p className="text-sm font-medium text-gray-700 mb-1">
-                Add Member:
-              </p>
-              <select
-                onChange={(e) => handleAddMember(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg p-2"
-              >
-                <option value="">Select a member...</option>
-                {members
-                  .filter((m) => !selectedGroup.members?.includes(m.userid))
-                  .map((m) => (
-                    <option key={m.userid} value={m.userid}>
-                      {m.profileName || m.userid}
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <button
-                onClick={() => setManageModal(false)}
-                className="px-3 py-2 text-slate-500 hover:text-slate-700"
-              >
-                Close
-              </button>
-              <button
-                onClick={handleDeleteGroup}
-                className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-1"
-              >
-                <Trash2 size={16} /> Delete Group
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 🧩 Debug Overlay */}
+      <div className="absolute bottom-0 left-0 w-full bg-slate-100 border-t border-slate-300 text-[11px] text-slate-600 p-2 font-mono">
+        <div>🐞 <b>Sidebar Debug</b></div>
+        <div>CurrentUser: {currentUser || "(none)"}</div>
+        <div>ProfileName: {profileName || "(none)"}</div>
+        <div>Members: {members?.length ?? 0}</div>
+        <div>Groups: {groups?.length ?? 0}</div>
+        <div>Unread keys: {Object.keys(unreadMap).length}</div>
+        <div className="truncate">API_BASE: {API_BASE}</div>
+      </div>
     </aside>
   );
 }

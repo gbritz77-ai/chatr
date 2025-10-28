@@ -1,45 +1,44 @@
 // src/lib/api.js
 
 // ----------------------------------------------------------
-// 🧠 Debugging & Environment Detection
+// 🌍 Environment Detection & Logging
 // ----------------------------------------------------------
 
-// Step 1: Read .env variable injected by Vite
-let base = import.meta.env.VITE_API_BASE;
+let base = import.meta.env.VITE_API_BASE || "";
 
-// Step 2: Check host
 const hostname = window.location.hostname;
 const isLocalHost = ["localhost", "127.0.0.1", "::1"].includes(hostname);
 
-// Step 3: Log initial state
 console.groupCollapsed("🌍 [API CONFIG DEBUG]");
 console.log("• VITE_API_BASE from .env:", base);
-console.log("• Detected window.location.hostname:", hostname);
-console.log("• Detected isLocalHost:", isLocalHost);
+console.log("• Hostname:", hostname);
+console.log("• Local environment?", isLocalHost);
 console.groupEnd();
 
-// Step 4: Auto-detect fallback if not provided
+// Auto-fallbacks
 if (!base) {
   if (isLocalHost) {
     base = "http://localhost:3000/dev";
     console.log("✅ Using local Serverless Offline:", base);
   } else {
-    base = "https://i2w2psstbe.execute-api.eu-west-2.amazonaws.com/dev";
+    base = "https://byu72oz79h.execute-api.eu-west-2.amazonaws.com/dev";
     console.log("🌍 Using production AWS API Gateway:", base);
   }
 } else {
   console.log("🧩 Using VITE_API_BASE override:", base);
 }
 
-// Step 5: Normalize trailing slash
-const API_BASE = base.replace(/\/+$/, "");
+// Final normalized base (no trailing slash)
+export const API_BASE = base.replace(/\/+$/, "");
 console.log("🚀 Final API_BASE:", API_BASE);
 
-// Helper to build clean URL
+// ----------------------------------------------------------
+// 🧰 URL Builder (ensures exactly one slash)
+// ----------------------------------------------------------
 function buildUrl(path) {
   if (!path.startsWith("/")) path = `/${path}`;
-  const url = `${API_BASE}${path}`;
-  console.log("➡️  Requesting:", url);
+  const url = `${API_BASE}${path}`.replace(/([^:]\/)\/+/g, "$1");
+  console.log("➡️ [API] Requesting:", url);
   return url;
 }
 
@@ -48,7 +47,13 @@ function buildUrl(path) {
 // ----------------------------------------------------------
 export async function getJSON(path) {
   const url = buildUrl(path);
-  const res = await fetch(url);
+
+  const res = await fetch(url, {
+    method: "GET",
+    mode: "cors",
+    headers: { "Content-Type": "application/json" },
+  });
+
   const text = await res.text();
 
   if (!res.ok) {
@@ -59,6 +64,7 @@ export async function getJSON(path) {
   try {
     return JSON.parse(text || "{}");
   } catch {
+    console.warn(`⚠️ Non-JSON response from ${url}`);
     return {};
   }
 }
@@ -68,10 +74,12 @@ export async function getJSON(path) {
 // ----------------------------------------------------------
 export async function postJSON(path, body) {
   const url = buildUrl(path);
+
   const res = await fetch(url, {
     method: "POST",
+    mode: "cors",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body || {}),
   });
 
   const text = await res.text();
@@ -84,6 +92,7 @@ export async function postJSON(path, body) {
   try {
     return JSON.parse(text || "{}");
   } catch {
+    console.warn(`⚠️ Non-JSON response from ${url}`);
     return {};
   }
 }
@@ -94,5 +103,3 @@ export async function postJSON(path, body) {
 export async function getMembers() {
   return getJSON("/members");
 }
-
-export { API_BASE };
