@@ -72,13 +72,11 @@ provider:
           Resource: arn:aws:logs:eu-west-2:*:log-group:*
 
 # ============================================================
-# 🧱 Package Optimizations
+# 🧱 Packaging Optimization
 # ============================================================
 package:
   individually: true
   patterns:
-    # ✅ Keep AWS SDK included for Node 20 runtime
-    # - '!node_modules/aws-sdk/**'   ❌ Removed line
     - '!node_modules/@aws-sdk/**'
     - '!node_modules/**/test/**'
     - '!node_modules/**/docs/**'
@@ -100,12 +98,11 @@ functions:
   auth:
     handler: src/handlers/auth.handler
     package:
-      individually: true
       patterns:
         - src/handlers/auth.js
         - node_modules/bcryptjs/**
         - node_modules/jsonwebtoken/**
-        - node_modules/aws-sdk/**    # ✅ Added so Lambda includes SDK
+        - node_modules/aws-sdk/**
     events:
       - http:
           path: auth
@@ -116,12 +113,11 @@ functions:
   register:
     handler: src/handlers/register.handler
     package:
-      individually: true
       patterns:
         - src/handlers/register.js
         - node_modules/bcryptjs/**
         - node_modules/jsonwebtoken/**
-        - node_modules/aws-sdk/**    # ✅ Added
+        - node_modules/aws-sdk/**
     events:
       - http:
           path: auth/register
@@ -141,13 +137,22 @@ functions:
   messages:
     handler: src/handlers/messages.handler
     events:
+      # Base route
       - http:
           path: messages
           method: any
           cors: true
+
+      # Proxy route (covers /messages/{anything})
       - http:
           path: messages/{proxy+}
           method: any
+          cors: true
+
+      # ✅ Explicit route for unread counts (fixes 404)
+      - http:
+          path: messages/unread-counts
+          method: get
           cors: true
 
   # --- 👨‍👩‍👧 Groups ---
@@ -157,6 +162,18 @@ functions:
       - http:
           path: groups
           method: any
+          cors: true
+      - http:
+          path: groups/add
+          method: put
+          cors: true
+      - http:
+          path: groups/remove
+          method: put
+          cors: true
+      - http:
+          path: groups/delete
+          method: delete
           cors: true
 
   # --- 📤 Pre-signed Upload ---
