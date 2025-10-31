@@ -234,6 +234,9 @@ export default function ChatWindow({ activeUser, currentUser }) {
   /* ----------------------------------------------------
    RENDER MESSAGES (attachments included)
 ---------------------------------------------------- */
+/* ----------------------------------------------------
+   RENDER MESSAGES (final version — handles jpg/png/gif/webp)
+---------------------------------------------------- */
 function renderBubble(msg) {
   const isMine = msg.sender === currentUser;
   const senderName = isMine
@@ -248,21 +251,16 @@ function renderBubble(msg) {
     msg.attachmentUrl ||
     (msg.attachmentKey ? `${S3_BUCKET_URL}/${msg.attachmentKey}` : null);
 
-  // ✅ Smarter type detection — fallback by extension
+  // ✅ Robust file-type detection (by MIME + extension)
   const fileType = msg.attachmentType || "";
-  const fileName = msg.attachmentKey || msg.attachmentUrl || "";
-  const lowerName = fileName.toLowerCase();
+  const fileName = (msg.attachmentKey || msg.attachmentUrl || "").toLowerCase();
 
   const isImage =
     fileType.startsWith("image/") ||
-    lowerName.endsWith(".jpg") ||
-    lowerName.endsWith(".jpeg") ||
-    lowerName.endsWith(".png") ||
-    lowerName.endsWith(".gif") ||
-    lowerName.endsWith(".webp");
+    /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
 
   const isPDF =
-    fileType === "application/pdf" || lowerName.endsWith(".pdf");
+    fileType === "application/pdf" || fileName.endsWith(".pdf");
 
   const isOtherFile = fileUrl && !isImage && !isPDF;
 
@@ -289,7 +287,7 @@ function renderBubble(msg) {
           <div className="whitespace-pre-wrap break-words">{msg.text}</div>
         )}
 
-        {/* 🖼️ Images / GIFs */}
+        {/* 🖼️ Show inline image or GIF */}
         {fileUrl && isImage && (
           <img
             src={fileUrl}
@@ -303,7 +301,7 @@ function renderBubble(msg) {
           />
         )}
 
-        {/* 📄 PDFs / Other Files */}
+        {/* 📄 PDF or Other File */}
         {fileUrl && (isPDF || isOtherFile) && (
           <a
             href={fileUrl}
@@ -333,6 +331,7 @@ function renderBubble(msg) {
     </div>
   );
 }
+
 
 
   /* ----------------------------------------------------
