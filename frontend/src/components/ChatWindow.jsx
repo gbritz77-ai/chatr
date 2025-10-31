@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — Fully Working (Images, Files, Emojis, GIFs)
+   💬 ChatWindow — Full Version (Images, GIFs, Files, Emojis)
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -34,7 +34,24 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const typingTimer = useRef(null);
 
   const currentProfileName = localStorage.getItem("profileName") || currentUser;
-  const S3_BUCKET_URL = "https://outsec-chat-bucket.s3.eu-west-2.amazonaws.com";
+
+  /* ----------------------------------------------------
+     🔗 Helper: Get Signed URL for downloads
+  ---------------------------------------------------- */
+  async function getSignedUrl(fileKey) {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE}/presign-download`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: fileKey }),
+      });
+      const data = await res.json();
+      return data?.viewURL || null;
+    } catch (err) {
+      console.error("❌ Failed to get signed download URL:", err);
+      return null;
+    }
+  }
 
   /* ----------------------------------------------------
      🧩 Helper: Normalized Chat ID
@@ -53,7 +70,6 @@ export default function ChatWindow({ activeUser, currentUser }) {
     if (!activeUser || !currentUser) return;
     try {
       let url = "";
-
       if (activeUser.type === "group") {
         url = `/messages?groupid=${encodeURIComponent(
           activeUser.id
@@ -65,10 +81,8 @@ export default function ChatWindow({ activeUser, currentUser }) {
         )}&username=${encodeURIComponent(currentUser)}`;
       }
 
-      console.log("💬 [ChatWindow] Fetching messages:", url);
       const res = await getJSON(url);
       const msgs = res?.messages || [];
-      console.log(`📦 Loaded ${msgs.length} messages for`, activeUser);
       setMessages(msgs);
     } catch (err) {
       console.error("❌ Failed to load messages:", err);
@@ -93,7 +107,6 @@ export default function ChatWindow({ activeUser, currentUser }) {
           ? `GROUP#${activeUser.id}`
           : getChatId(currentUser, activeUser.id);
 
-      console.log("📨 Marking chat as read:", chatId);
       await postJSON("/messages/mark-read", { chatId, username: currentUser });
       setLastReadTimestamp(new Date().toISOString());
     } catch (err) {
@@ -132,20 +145,8 @@ export default function ChatWindow({ activeUser, currentUser }) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [activeUser]);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    setAutoScrollEnabled(true);
-  };
-
   /* ----------------------------------------------------
-     SEND MESSAGE (with verified S3 upload)
+     SEND MESSAGE
   ---------------------------------------------------- */
   async function sendMessage(e) {
     e.preventDefault();
@@ -158,9 +159,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       let viewUrl = null;
 
       if (attachment) {
-        console.log("📤 Uploading attachment:", attachment.name, attachment.type);
-
-        // 1️⃣ Request presigned URL
+        // Request presigned upload URL
         const presign = await fetch(
           `${import.meta.env.VITE_API_BASE}/presign-upload`,
           {
@@ -169,30 +168,25 @@ export default function ChatWindow({ activeUser, currentUser }) {
             body: JSON.stringify({ name: attachment.name, type: attachment.type }),
           }
         );
-
         const data = await presign.json();
         if (!data?.uploadURL) throw new Error("Presign URL generation failed");
 
-        // 2️⃣ Upload to S3 with content-type header
+        // Upload file to S3
         const uploadResp = await fetch(data.uploadURL, {
           method: "PUT",
           headers: { "Content-Type": attachment.type },
           body: attachment,
         });
-
         if (!uploadResp.ok) {
           const errText = await uploadResp.text();
           throw new Error(`S3 upload failed: ${uploadResp.status} ${errText}`);
         }
-
-        console.log("✅ S3 upload complete:", data.fileKey);
 
         fileKey = data.fileKey;
         fileType = attachment.type;
         viewUrl = data.viewURL;
       }
 
-      // 3️⃣ Include viewUrl in message payload
       const payload =
         activeUser.type === "group"
           ? {
@@ -212,14 +206,13 @@ export default function ChatWindow({ activeUser, currentUser }) {
               attachmentUrl: viewUrl,
             };
 
-      console.log("🚀 Sending message payload:", payload);
       await postJSON("/messages", payload);
       setText("");
       setAttachment(null);
       setShowEmojiPicker(false);
       await loadMessages();
       await markAsRead();
-      scrollToBottom();
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     } catch (err) {
       console.error("❌ Failed to send message:", err);
       alert("Message send failed: " + err.message);
@@ -227,133 +220,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       setUploading(false);
     }
   }
-async function getSignedUrl(fileKey) {
-  try {
-    const res = await fetch(`${import.meta.env.VITE_API_BASE}/presign-download`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: fileKey }),
-    });
-    const data = await res.json();
-    return data?.viewURL || null;
-  } catch (err) {
-    console.error("❌ Failed to get signed download URL:", err);
-    return null;
-  }
-}
-  /* ----------------------------------------------------
-     RENDER MESSAGES (attachments included)
-  ---------------------------------------------------- */
-  /* ----------------------------------------------------
-   RENDER MESSAGES (attachments included)
----------------------------------------------------- */
-/* ----------------------------------------------------
-   RENDER MESSAGES (final version — handles jpg/png/gif/webp)
----------------------------------------------------- */
-function renderBubble(msg) {
-  const isMine = msg.sender === currentUser;
-  const senderName = isMine
-    ? currentProfileName
-    : msg.senderProfileName || msg.sender;
-  const time = new Date(msg.timestamp).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 
-  const fileType = msg.attachmentType || "";
-  const fileName = (msg.attachmentKey || msg.attachmentUrl || "").toLowerCase();
-  const isImage =
-    fileType.startsWith("image/") ||
-    /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
-  const isPDF =
-    fileType === "application/pdf" || fileName.endsWith(".pdf");
-  const isOtherFile = msg.attachmentKey && !isImage && !isPDF;
-
-  // 🧠 State for the resolved signed URL
-  const [viewUrl, setViewUrl] = useState(msg.attachmentUrl || null);
-
-  useEffect(() => {
-    if (!viewUrl && msg.attachmentKey) {
-      getSignedUrl(msg.attachmentKey).then((url) => {
-        if (url) setViewUrl(url);
-      });
-    }
-  }, [msg.attachmentKey, viewUrl]);
-
-  return (
-    <div
-      key={msg.messageid || `${msg.sender}-${msg.timestamp}`}
-      className={`flex items-end gap-2 ${isMine ? "flex-row-reverse" : ""}`}
-    >
-      <Avatar seed={senderName} username={senderName} size={10} style="micah" />
-      <div
-        className={`p-3 rounded-lg max-w-[70%] ${
-          isMine
-            ? "bg-blue-600 text-white ml-auto"
-            : "bg-white border text-slate-800"
-        }`}
-      >
-        {!isMine && (
-          <div className="text-xs font-semibold text-slate-500 mb-1">
-            {senderName}
-          </div>
-        )}
-
-        {msg.text && (
-          <div className="whitespace-pre-wrap break-words">{msg.text}</div>
-        )}
-
-        {/* 🖼️ Show image or GIF */}
-        {viewUrl && isImage && (
-          <img
-            src={viewUrl}
-            alt="attachment"
-            loading="lazy"
-            className="max-h-64 rounded-lg border mt-2 object-contain shadow-sm cursor-pointer transition hover:scale-[1.02]"
-            onError={(e) => {
-              console.warn("⚠️ Image failed to load:", viewUrl);
-              e.target.style.display = "none";
-            }}
-          />
-        )}
-
-        {/* 📄 PDF / Other file */}
-        {viewUrl && (isPDF || isOtherFile) && (
-          <a
-            href={viewUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`mt-2 flex items-center gap-2 px-3 py-2 rounded-md border transition ${
-              isMine
-                ? "border-blue-400 bg-blue-700/40 hover:bg-blue-700/70 text-white"
-                : "border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-800"
-            }`}
-          >
-            <FileText size={16} />
-            <span className="text-sm truncate">
-              {msg.attachmentKey?.split("/").pop() || "Download File"}
-            </span>
-          </a>
-        )}
-
-        <div
-          className={`text-xs mt-2 ${
-            isMine ? "text-blue-200" : "text-slate-500"
-          }`}
-        >
-          {time}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-
-
-  /* ----------------------------------------------------
-     RETURN LAYOUT
-  ---------------------------------------------------- */
   return (
     <div className="flex flex-col flex-1 h-screen ml-[320px] bg-slate-50 relative">
       {/* Header */}
@@ -388,7 +255,15 @@ function renderBubble(msg) {
       >
         {activeUser ? (
           messages.length ? (
-            messages.map(renderBubble)
+            messages.map((msg) => (
+              <MessageBubble
+                key={msg.messageid || msg.timestamp}
+                msg={msg}
+                currentUser={currentUser}
+                currentProfileName={currentProfileName}
+                getSignedUrl={getSignedUrl}
+              />
+            ))
           ) : (
             <p className="text-center text-slate-400 italic">No messages yet</p>
           )
@@ -404,7 +279,6 @@ function renderBubble(msg) {
       {activeUser && (
         <div className="sticky bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-inner px-6 py-3">
           <form onSubmit={sendMessage} className="flex items-center gap-3 relative">
-            {/* 📎 Attachment */}
             <input
               type="file"
               accept="image/*,video/*,application/pdf"
@@ -412,10 +286,7 @@ function renderBubble(msg) {
               id="fileInput"
               onChange={(e) => {
                 const file = e.target.files[0];
-                if (file) {
-                  setAttachment(file);
-                  console.log("📎 Selected:", file.name);
-                }
+                if (file) setAttachment(file);
               }}
             />
             <button
@@ -427,7 +298,7 @@ function renderBubble(msg) {
               <Paperclip size={20} />
             </button>
 
-            {/* 😊 Emoji Picker */}
+            {/* Emoji Picker */}
             <div className="relative">
               <button
                 type="button"
@@ -437,7 +308,6 @@ function renderBubble(msg) {
               >
                 <Smile size={22} />
               </button>
-
               {showEmojiPicker && (
                 <div
                   ref={pickerRef}
@@ -452,7 +322,7 @@ function renderBubble(msg) {
               )}
             </div>
 
-            {/* 🎞️ GIF Picker */}
+            {/* GIF Picker */}
             <div className="relative">
               <button
                 type="button"
@@ -462,12 +332,10 @@ function renderBubble(msg) {
               >
                 <Image size={22} />
               </button>
-
               {showGifPicker && (
                 <div className="absolute bottom-12 left-0 z-50 bg-white shadow-lg border rounded-xl">
                   <GifPicker
                     onSelect={(gifUrl) => {
-                      console.log("🎞️ Selected GIF:", gifUrl);
                       setAttachment({
                         type: "image/gif",
                         name: gifUrl,
@@ -480,7 +348,6 @@ function renderBubble(msg) {
               )}
             </div>
 
-            {/* ✏️ Textbox */}
             <input
               type="text"
               placeholder="Type a message..."
@@ -489,7 +356,6 @@ function renderBubble(msg) {
               className="flex-1 bg-transparent border-none focus:outline-none text-sm text-slate-700 px-2"
             />
 
-            {/* 📤 Send */}
             <button
               type="submit"
               disabled={uploading}
@@ -500,15 +366,10 @@ function renderBubble(msg) {
               }`}
               title="Send message"
             >
-              {uploading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Send className="w-5 h-5" />
-              )}
+              {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </button>
           </form>
 
-          {/* 🧠 Attachment Preview */}
           {attachment && (
             <div className="mt-2 flex items-center justify-between text-xs text-slate-600 bg-slate-100 rounded-lg px-3 py-2">
               <div className="flex items-center gap-2 truncate">
@@ -526,6 +387,98 @@ function renderBubble(msg) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ============================================================
+   💬 MessageBubble Component (for attachments)
+============================================================ */
+function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
+  const [viewUrl, setViewUrl] = useState(msg.attachmentUrl || null);
+
+  useEffect(() => {
+    if (!viewUrl && msg.attachmentKey) {
+      getSignedUrl(msg.attachmentKey).then((url) => {
+        if (url) setViewUrl(url);
+      });
+    }
+  }, [msg.attachmentKey, viewUrl]);
+
+  const isMine = msg.sender === currentUser;
+  const senderName = isMine
+    ? currentProfileName
+    : msg.senderProfileName || msg.sender;
+  const time = new Date(msg.timestamp).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const fileType = msg.attachmentType || "";
+  const fileName = (msg.attachmentKey || msg.attachmentUrl || "").toLowerCase();
+  const isImage =
+    fileType.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
+  const isPDF =
+    fileType === "application/pdf" || fileName.endsWith(".pdf");
+  const isOtherFile = msg.attachmentKey && !isImage && !isPDF;
+
+  return (
+    <div
+      className={`flex items-end gap-2 ${isMine ? "flex-row-reverse" : ""}`}
+    >
+      <Avatar seed={senderName} username={senderName} size={10} style="micah" />
+      <div
+        className={`p-3 rounded-lg max-w-[70%] ${
+          isMine
+            ? "bg-blue-600 text-white ml-auto"
+            : "bg-white border text-slate-800"
+        }`}
+      >
+        {!isMine && (
+          <div className="text-xs font-semibold text-slate-500 mb-1">
+            {senderName}
+          </div>
+        )}
+
+        {msg.text && (
+          <div className="whitespace-pre-wrap break-words">{msg.text}</div>
+        )}
+
+        {viewUrl && isImage && (
+          <img
+            src={viewUrl}
+            alt="attachment"
+            loading="lazy"
+            className="max-h-64 rounded-lg border mt-2 object-contain shadow-sm cursor-pointer transition hover:scale-[1.02]"
+          />
+        )}
+
+        {viewUrl && (isPDF || isOtherFile) && (
+          <a
+            href={viewUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`mt-2 flex items-center gap-2 px-3 py-2 rounded-md border transition ${
+              isMine
+                ? "border-blue-400 bg-blue-700/40 hover:bg-blue-700/70 text-white"
+                : "border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-800"
+            }`}
+          >
+            <FileText size={16} />
+            <span className="text-sm truncate">
+              {msg.attachmentKey?.split("/").pop() || "Download File"}
+            </span>
+          </a>
+        )}
+
+        <div
+          className={`text-xs mt-2 ${
+            isMine ? "text-blue-200" : "text-slate-500"
+          }`}
+        >
+          {time}
+        </div>
+      </div>
     </div>
   );
 }
