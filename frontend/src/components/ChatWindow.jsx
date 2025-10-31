@@ -205,99 +205,90 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
-     RENDER MESSAGES
+     RENDER MESSAGES (Enhanced for attachments)
   ---------------------------------------------------- */
-  /* ----------------------------------------------------
-   RENDER MESSAGES (Enhanced for attachments)
----------------------------------------------------- */
-function renderBubble(msg) {
-  const isMine = msg.sender === currentUser;
-  const senderName = isMine ? currentProfileName : msg.senderProfileName || msg.sender;
-  const time = new Date(msg.timestamp).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  function renderBubble(msg) {
+    const isMine = msg.sender === currentUser;
+    const senderName = isMine ? currentProfileName : msg.senderProfileName || msg.sender;
+    const time = new Date(msg.timestamp).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
-  const fileUrl =
-    msg.attachmentUrl ||
-    (msg.attachmentKey ? `${S3_BUCKET_URL}/${msg.attachmentKey}` : null);
+    const fileUrl =
+      msg.attachmentUrl ||
+      (msg.attachmentKey ? `${S3_BUCKET_URL}/${msg.attachmentKey}` : null);
 
-  const fileType = msg.attachmentType || "";
-  const isImage = fileType.startsWith("image/");
-  const isPDF = fileType === "application/pdf";
-  const isOtherFile =
-    fileUrl && !isImage && !isPDF && !fileType.startsWith("text/");
+    const fileType = msg.attachmentType || "";
+    const isImage = fileType.startsWith("image/");
+    const isPDF = fileType === "application/pdf";
+    const isOtherFile =
+      fileUrl && !isImage && !isPDF && !fileType.startsWith("text/");
 
-  return (
-    <div
-      key={msg.messageid || `${msg.sender}-${msg.timestamp}`}
-      className={`flex items-end gap-2 ${isMine ? "flex-row-reverse" : ""}`}
-    >
-      <Avatar
-        seed={senderName}
-        username={senderName}
-        size={10}
-        style="micah"
-      />
+    return (
       <div
-        className={`p-3 rounded-lg max-w-[70%] ${
-          isMine
-            ? "bg-blue-600 text-white ml-auto"
-            : "bg-white border text-slate-800"
-        }`}
+        key={msg.messageid || `${msg.sender}-${msg.timestamp}`}
+        className={`flex items-end gap-2 ${isMine ? "flex-row-reverse" : ""}`}
       >
-        {!isMine && (
-          <div className="text-xs font-semibold text-slate-500 mb-1">
-            {senderName}
-          </div>
-        )}
-
-        {/* 📝 Text */}
-        {msg.text && (
-          <div className="whitespace-pre-wrap break-words">{msg.text}</div>
-        )}
-
-        {/* 🖼️ Image or GIF */}
-        {fileUrl && isImage && (
-          <img
-            src={fileUrl}
-            alt="attachment"
-            className="max-h-64 rounded-lg border mt-2 object-contain"
-          />
-        )}
-
-        {/* 📄 PDF or File Link */}
-        {fileUrl && (isPDF || isOtherFile) && (
-          <a
-            href={fileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`mt-2 flex items-center gap-2 px-3 py-2 rounded-md border transition ${
-              isMine
-                ? "border-blue-400 bg-blue-700/40 hover:bg-blue-700/70 text-white"
-                : "border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-800"
-            }`}
-          >
-            <FileText size={16} />
-            <span className="text-sm truncate">
-              {msg.attachmentKey?.split("/").pop() || "Download File"}
-            </span>
-          </a>
-        )}
-
-        {/* 🕒 Timestamp */}
+        <Avatar seed={senderName} username={senderName} size={10} style="micah" />
         <div
-          className={`text-xs mt-2 ${
-            isMine ? "text-blue-200" : "text-slate-500"
+          className={`p-3 rounded-lg max-w-[70%] ${
+            isMine
+              ? "bg-blue-600 text-white ml-auto"
+              : "bg-white border text-slate-800"
           }`}
         >
-          {time}
+          {!isMine && (
+            <div className="text-xs font-semibold text-slate-500 mb-1">
+              {senderName}
+            </div>
+          )}
+
+          {/* 📝 Text */}
+          {msg.text && (
+            <div className="whitespace-pre-wrap break-words">{msg.text}</div>
+          )}
+
+          {/* 🖼️ Image or GIF */}
+          {fileUrl && isImage && (
+            <img
+              src={fileUrl}
+              alt="attachment"
+              className="max-h-64 rounded-lg border mt-2 object-contain shadow-sm"
+            />
+          )}
+
+          {/* 📄 PDF or File Link */}
+          {fileUrl && (isPDF || isOtherFile) && (
+            <a
+              href={fileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`mt-2 flex items-center gap-2 px-3 py-2 rounded-md border transition ${
+                isMine
+                  ? "border-blue-400 bg-blue-700/40 hover:bg-blue-700/70 text-white"
+                  : "border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-800"
+              }`}
+            >
+              <FileText size={16} />
+              <span className="text-sm truncate">
+                {msg.attachmentKey?.split("/").pop() || "Download File"}
+              </span>
+            </a>
+          )}
+
+          {/* 🕒 Timestamp */}
+          <div
+            className={`text-xs mt-2 ${
+              isMine ? "text-blue-200" : "text-slate-500"
+            }`}
+          >
+            {time}
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
-
+    );
+  }
 
   /* ----------------------------------------------------
      RETURN LAYOUT
@@ -316,7 +307,11 @@ function renderBubble(msg) {
             />
             <div>
               <div>{activeUser.name || activeUser.id}</div>
-              {remoteTyping && <div className="text-xs text-slate-500 animate-pulse">typing...</div>}
+              {remoteTyping && (
+                <div className="text-xs text-slate-500 animate-pulse">
+                  typing...
+                </div>
+              )}
             </div>
           </>
         ) : (
@@ -325,12 +320,18 @@ function renderBubble(msg) {
       </div>
 
       {/* Messages */}
-      <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-5 space-y-4">
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-5 space-y-4"
+      >
         {activeUser ? (
           messages.length ? (
             messages.map(renderBubble)
           ) : (
-            <p className="text-center text-slate-400 italic">No messages yet</p>
+            <p className="text-center text-slate-400 italic">
+              No messages yet
+            </p>
           )
         ) : (
           <p className="text-center text-slate-400 italic mt-10">
