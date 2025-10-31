@@ -145,7 +145,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   };
 
   /* ----------------------------------------------------
-     SEND MESSAGE
+     SEND MESSAGE (with verified S3 upload)
   ---------------------------------------------------- */
   async function sendMessage(e) {
     e.preventDefault();
@@ -158,7 +158,9 @@ export default function ChatWindow({ activeUser, currentUser }) {
       let viewUrl = null;
 
       if (attachment) {
-        // ✅ Request presigned URL from backend
+        console.log("📤 Uploading attachment:", attachment.name, attachment.type);
+
+        // 1️⃣ Request presigned URL
         const presign = await fetch(
           `${import.meta.env.VITE_API_BASE}/presign-upload`,
           {
@@ -169,16 +171,28 @@ export default function ChatWindow({ activeUser, currentUser }) {
         );
 
         const data = await presign.json();
+        if (!data?.uploadURL) throw new Error("Presign URL generation failed");
 
-        // ✅ Upload file to S3
-        await fetch(data.uploadURL, { method: "PUT", body: attachment });
+        // 2️⃣ Upload to S3 with content-type header
+        const uploadResp = await fetch(data.uploadURL, {
+          method: "PUT",
+          headers: { "Content-Type": attachment.type },
+          body: attachment,
+        });
+
+        if (!uploadResp.ok) {
+          const errText = await uploadResp.text();
+          throw new Error(`S3 upload failed: ${uploadResp.status} ${errText}`);
+        }
+
+        console.log("✅ S3 upload complete:", data.fileKey);
 
         fileKey = data.fileKey;
         fileType = attachment.type;
-        viewUrl = data.viewURL; // ✅ use signed URL for reading
+        viewUrl = data.viewURL;
       }
 
-      // ✅ Include viewUrl in message payload
+      // 3️⃣ Include viewUrl in message payload
       const payload =
         activeUser.type === "group"
           ? {
@@ -215,7 +229,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
-     RENDER MESSAGES
+     RENDER MESSAGES (attachments included)
   ---------------------------------------------------- */
   function renderBubble(msg) {
     const isMine = msg.sender === currentUser;
@@ -258,16 +272,17 @@ export default function ChatWindow({ activeUser, currentUser }) {
             <div className="whitespace-pre-wrap break-words">{msg.text}</div>
           )}
 
-          {/* 🖼️ Images & GIFs */}
+          {/* 🖼️ Image / GIF */}
           {fileUrl && isImage && (
             <img
               src={fileUrl}
               alt="attachment"
               className="max-h-64 rounded-lg border mt-2 object-contain shadow-sm"
+              onError={(e) => (e.target.style.display = "none")}
             />
           )}
 
-          {/* 📄 PDF or Other File Link */}
+          {/* 📄 PDF / File */}
           {fileUrl && (isPDF || isOtherFile) && (
             <a
               href={fileUrl}
@@ -347,7 +362,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Sticky Input Bar */}
+      {/* Input Bar */}
       {activeUser && (
         <div className="sticky bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-inner px-6 py-3">
           <form onSubmit={sendMessage} className="flex items-center gap-3 relative">
