@@ -10,13 +10,11 @@ import {
   Paperclip,
   Loader2,
   FileText,
-  AlertTriangle,
-  ArrowDown,
   Image,
 } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — Fixed Chat ID Normalization + Debugging
+   💬 ChatWindow — Fully Restored (Emojis, GIFs, Attachments)
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -24,13 +22,10 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [attachment, setAttachment] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [lastReadTimestamp, setLastReadTimestamp] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
   const [remoteTyping, setRemoteTyping] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState({});
-  const [errorUrl, setErrorUrl] = useState(null);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
 
   const pickerRef = useRef(null);
@@ -64,11 +59,10 @@ export default function ChatWindow({ activeUser, currentUser }) {
           activeUser.id
         )}&username=${encodeURIComponent(currentUser)}`;
       } else if (activeUser.type === "user") {
-        // FIXED: use .id and normalized chatId
         const chatId = getChatId(currentUser, activeUser.id);
-        url = `/messages?chatId=${encodeURIComponent(chatId)}&username=${encodeURIComponent(
-          currentUser
-        )}`;
+        url = `/messages?chatId=${encodeURIComponent(
+          chatId
+        )}&username=${encodeURIComponent(currentUser)}`;
       }
 
       console.log("💬 [ChatWindow] Fetching messages:", url);
@@ -108,20 +102,8 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
-     PRESENCE + TYPING
+     TYPING INDICATOR
   ---------------------------------------------------- */
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (activeUser?.id) {
-        setOnlineUsers((prev) => ({
-          ...prev,
-          [activeUser.id]: Math.random() > 0.2,
-        }));
-      }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [activeUser]);
-
   function handleTypingChange(e) {
     setText(e.target.value);
     if (!isTyping) {
@@ -170,6 +152,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
     if ((!text.trim() && !attachment) || !activeUser) return;
 
     try {
+      setUploading(true);
       let fileKey = null;
       let fileType = null;
 
@@ -216,6 +199,8 @@ export default function ChatWindow({ activeUser, currentUser }) {
     } catch (err) {
       console.error("❌ Failed to send message:", err);
       alert("Message send failed: " + err.message);
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -288,7 +273,84 @@ export default function ChatWindow({ activeUser, currentUser }) {
       {/* Sticky Input Bar */}
       {activeUser && (
         <div className="sticky bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-inner px-6 py-3">
-          <form onSubmit={sendMessage} className="flex items-center gap-3">
+          <form onSubmit={sendMessage} className="flex items-center gap-3 relative">
+            {/* 📎 Attachment */}
+            <input
+              type="file"
+              accept="image/*,video/*,application/pdf"
+              className="hidden"
+              id="fileInput"
+              onChange={(e) => {
+                const file = e.target.files[0];
+                if (file) {
+                  setAttachment(file);
+                  console.log("📎 Selected:", file.name);
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => document.getElementById("fileInput").click()}
+              className="text-slate-500 hover:text-blue-600 transition"
+              title="Attach file"
+            >
+              <Paperclip size={20} />
+            </button>
+
+            {/* 😊 Emoji Picker */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker((prev) => !prev)}
+                className="text-slate-500 hover:text-yellow-500 transition"
+                title="Add emoji"
+              >
+                <Smile size={22} />
+              </button>
+
+              {showEmojiPicker && (
+                <div
+                  ref={pickerRef}
+                  className="absolute bottom-12 left-0 z-50 bg-white shadow-lg border rounded-xl"
+                >
+                  <Picker
+                    data={data}
+                    onEmojiSelect={(e) => setText((t) => t + e.native)}
+                    theme="light"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* 🎞️ GIF Picker */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowGifPicker((prev) => !prev)}
+                className="text-slate-500 hover:text-pink-600 transition"
+                title="Send GIF"
+              >
+                <Image size={22} />
+              </button>
+
+              {showGifPicker && (
+                <div className="absolute bottom-12 left-0 z-50 bg-white shadow-lg border rounded-xl">
+                  <GifPicker
+                    onSelect={(gifUrl) => {
+                      console.log("🎞️ Selected GIF:", gifUrl);
+                      setAttachment({
+                        type: "image/gif",
+                        name: gifUrl,
+                        url: gifUrl,
+                      });
+                      setShowGifPicker(false);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* ✏️ Textbox */}
             <input
               type="text"
               placeholder="Type a message..."
@@ -296,16 +358,42 @@ export default function ChatWindow({ activeUser, currentUser }) {
               onChange={handleTypingChange}
               className="flex-1 bg-transparent border-none focus:outline-none text-sm text-slate-700 px-2"
             />
+
+            {/* 📤 Send */}
             <button
               type="submit"
               disabled={uploading}
               className={`p-3 rounded-full shadow-sm transition ${
-                uploading ? "bg-slate-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"
+                uploading
+                  ? "bg-slate-400 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700 text-white"
               }`}
+              title="Send message"
             >
-              {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+              {uploading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Send className="w-5 h-5" />
+              )}
             </button>
           </form>
+
+          {/* 🧠 Attachment Preview */}
+          {attachment && (
+            <div className="mt-2 flex items-center justify-between text-xs text-slate-600 bg-slate-100 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2 truncate">
+                <FileText size={14} />
+                <span className="truncate">{attachment.name}</span>
+              </div>
+              <button
+                type="button"
+                className="text-red-500 hover:text-red-700"
+                onClick={() => setAttachment(null)}
+              >
+                Remove
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
