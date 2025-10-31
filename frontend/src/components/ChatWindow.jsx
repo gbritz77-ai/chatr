@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — Fixed (uses pre-signed viewURL for attachments)
+   💬 ChatWindow — Fully Working (Images, Files, Emojis, GIFs)
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -155,9 +155,10 @@ export default function ChatWindow({ activeUser, currentUser }) {
       setUploading(true);
       let fileKey = null;
       let fileType = null;
-      let viewUrl = null; // ✅ added
+      let viewUrl = null;
 
       if (attachment) {
+        // ✅ Request presigned URL from backend
         const presign = await fetch(
           `${import.meta.env.VITE_API_BASE}/presign-upload`,
           {
@@ -166,16 +167,18 @@ export default function ChatWindow({ activeUser, currentUser }) {
             body: JSON.stringify({ name: attachment.name, type: attachment.type }),
           }
         );
+
         const data = await presign.json();
 
-        // upload to S3
+        // ✅ Upload file to S3
         await fetch(data.uploadURL, { method: "PUT", body: attachment });
 
         fileKey = data.fileKey;
         fileType = attachment.type;
-        viewUrl = data.viewURL; // ✅ use viewURL from backend
+        viewUrl = data.viewURL; // ✅ use signed URL for reading
       }
 
+      // ✅ Include viewUrl in message payload
       const payload =
         activeUser.type === "group"
           ? {
@@ -184,7 +187,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
               text,
               attachmentKey: fileKey,
               attachmentType: fileType,
-              attachmentUrl: viewUrl, // ✅ added
+              attachmentUrl: viewUrl,
             }
           : {
               sender: currentUser,
@@ -192,7 +195,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
               text,
               attachmentKey: fileKey,
               attachmentType: fileType,
-              attachmentUrl: viewUrl, // ✅ added
+              attachmentUrl: viewUrl,
             };
 
       console.log("🚀 Sending message payload:", payload);
@@ -212,7 +215,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
-     RENDER MESSAGES (Enhanced for attachments)
+     RENDER MESSAGES
   ---------------------------------------------------- */
   function renderBubble(msg) {
     const isMine = msg.sender === currentUser;
@@ -251,12 +254,11 @@ export default function ChatWindow({ activeUser, currentUser }) {
             </div>
           )}
 
-          {/* 📝 Text */}
           {msg.text && (
             <div className="whitespace-pre-wrap break-words">{msg.text}</div>
           )}
 
-          {/* 🖼️ Image or GIF */}
+          {/* 🖼️ Images & GIFs */}
           {fileUrl && isImage && (
             <img
               src={fileUrl}
@@ -265,7 +267,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
             />
           )}
 
-          {/* 📄 PDF or File Link */}
+          {/* 📄 PDF or Other File Link */}
           {fileUrl && (isPDF || isOtherFile) && (
             <a
               href={fileUrl}
@@ -284,7 +286,6 @@ export default function ChatWindow({ activeUser, currentUser }) {
             </a>
           )}
 
-          {/* 🕒 Timestamp */}
           <div
             className={`text-xs mt-2 ${
               isMine ? "text-blue-200" : "text-slate-500"
@@ -336,9 +337,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
           messages.length ? (
             messages.map(renderBubble)
           ) : (
-            <p className="text-center text-slate-400 italic">
-              No messages yet
-            </p>
+            <p className="text-center text-slate-400 italic">No messages yet</p>
           )
         ) : (
           <p className="text-center text-slate-400 italic mt-10">
