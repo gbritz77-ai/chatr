@@ -102,12 +102,12 @@ export default function ChatWindow({ activeUser, currentUser }) {
   async function markAsRead() {
     if (!activeUser || !currentUser) return;
     try {
-      const chatId =
+      const chatid =
         activeUser.type === "group"
           ? `GROUP#${activeUser.id}`
           : getChatId(currentUser, activeUser.id);
 
-      await postJSON("/messages/mark-read", { chatId, username: currentUser });
+      await postJSON("/messages/mark-read", { chatid, username: currentUser });
       setLastReadTimestamp(new Date().toISOString());
     } catch (err) {
       console.error("❌ Failed to mark chat as read:", err);
@@ -366,7 +366,11 @@ export default function ChatWindow({ activeUser, currentUser }) {
               }`}
               title="Send message"
             >
-              {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+              {uploading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Send className="w-5 h-5" />
+              )}
             </button>
           </form>
 
@@ -392,7 +396,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
 }
 
 /* ============================================================
-   💬 MessageBubble Component (for attachments)
+   💬 MessageBubble Component (show sender name on top)
 ============================================================ */
 function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
   const [viewUrl, setViewUrl] = useState(msg.attachmentUrl || null);
@@ -407,8 +411,8 @@ function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
 
   const isMine = msg.sender === currentUser;
   const senderName = isMine
-    ? currentProfileName
-    : msg.senderProfileName || msg.sender;
+    ? "You"
+    : msg.senderProfileName || msg.sender?.split("@")[0] || msg.sender;
   const time = new Date(msg.timestamp).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
@@ -418,15 +422,23 @@ function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
   const fileName = (msg.attachmentKey || msg.attachmentUrl || "").toLowerCase();
   const isImage =
     fileType.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
-  const isPDF =
-    fileType === "application/pdf" || fileName.endsWith(".pdf");
+  const isPDF = fileType === "application/pdf" || fileName.endsWith(".pdf");
   const isOtherFile = msg.attachmentKey && !isImage && !isPDF;
 
   return (
     <div
-      className={`flex items-end gap-2 ${isMine ? "flex-row-reverse" : ""}`}
+      className={`flex flex-col gap-1 ${isMine ? "items-end" : "items-start"}`}
     >
-      <Avatar seed={senderName} username={senderName} size={10} style="micah" />
+      {/* 🧍 Sender Name */}
+      <div
+        className={`text-xs font-semibold mb-1 ${
+          isMine ? "text-blue-500" : "text-slate-500"
+        }`}
+      >
+        {senderName}
+      </div>
+
+      {/* 💬 Message Bubble */}
       <div
         className={`p-3 rounded-lg max-w-[70%] ${
           isMine
@@ -434,15 +446,7 @@ function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
             : "bg-white border text-slate-800"
         }`}
       >
-        {!isMine && (
-          <div className="text-xs font-semibold text-slate-500 mb-1">
-            {senderName}
-          </div>
-        )}
-
-        {msg.text && (
-          <div className="whitespace-pre-wrap break-words">{msg.text}</div>
-        )}
+        {msg.text && <div className="whitespace-pre-wrap break-words">{msg.text}</div>}
 
         {viewUrl && isImage && (
           <img
