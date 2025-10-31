@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — Fully Restored (Emojis, GIFs, Attachments)
+   💬 ChatWindow — Fixed (uses pre-signed viewURL for attachments)
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -155,6 +155,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       setUploading(true);
       let fileKey = null;
       let fileType = null;
+      let viewUrl = null; // ✅ added
 
       if (attachment) {
         const presign = await fetch(
@@ -166,9 +167,13 @@ export default function ChatWindow({ activeUser, currentUser }) {
           }
         );
         const data = await presign.json();
+
+        // upload to S3
         await fetch(data.uploadURL, { method: "PUT", body: attachment });
+
         fileKey = data.fileKey;
         fileType = attachment.type;
+        viewUrl = data.viewURL; // ✅ use viewURL from backend
       }
 
       const payload =
@@ -179,6 +184,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
               text,
               attachmentKey: fileKey,
               attachmentType: fileType,
+              attachmentUrl: viewUrl, // ✅ added
             }
           : {
               sender: currentUser,
@@ -186,6 +192,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
               text,
               attachmentKey: fileKey,
               attachmentType: fileType,
+              attachmentUrl: viewUrl, // ✅ added
             };
 
       console.log("🚀 Sending message payload:", payload);
