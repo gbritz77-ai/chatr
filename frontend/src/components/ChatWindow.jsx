@@ -231,87 +231,109 @@ export default function ChatWindow({ activeUser, currentUser }) {
   /* ----------------------------------------------------
      RENDER MESSAGES (attachments included)
   ---------------------------------------------------- */
-  function renderBubble(msg) {
-    const isMine = msg.sender === currentUser;
-    const senderName = isMine ? currentProfileName : msg.senderProfileName || msg.sender;
-    const time = new Date(msg.timestamp).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  /* ----------------------------------------------------
+   RENDER MESSAGES (attachments included)
+---------------------------------------------------- */
+function renderBubble(msg) {
+  const isMine = msg.sender === currentUser;
+  const senderName = isMine
+    ? currentProfileName
+    : msg.senderProfileName || msg.sender;
+  const time = new Date(msg.timestamp).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
-    const fileUrl =
-      msg.attachmentUrl ||
-      (msg.attachmentKey ? `${S3_BUCKET_URL}/${msg.attachmentKey}` : null);
+  const fileUrl =
+    msg.attachmentUrl ||
+    (msg.attachmentKey ? `${S3_BUCKET_URL}/${msg.attachmentKey}` : null);
 
-    const fileType = msg.attachmentType || "";
-    const isImage = fileType.startsWith("image/");
-    const isPDF = fileType === "application/pdf";
-    const isOtherFile =
-      fileUrl && !isImage && !isPDF && !fileType.startsWith("text/");
+  // ✅ Smarter type detection — fallback by extension
+  const fileType = msg.attachmentType || "";
+  const fileName = msg.attachmentKey || msg.attachmentUrl || "";
+  const lowerName = fileName.toLowerCase();
 
-    return (
+  const isImage =
+    fileType.startsWith("image/") ||
+    lowerName.endsWith(".jpg") ||
+    lowerName.endsWith(".jpeg") ||
+    lowerName.endsWith(".png") ||
+    lowerName.endsWith(".gif") ||
+    lowerName.endsWith(".webp");
+
+  const isPDF =
+    fileType === "application/pdf" || lowerName.endsWith(".pdf");
+
+  const isOtherFile = fileUrl && !isImage && !isPDF;
+
+  return (
+    <div
+      key={msg.messageid || `${msg.sender}-${msg.timestamp}`}
+      className={`flex items-end gap-2 ${isMine ? "flex-row-reverse" : ""}`}
+    >
+      <Avatar seed={senderName} username={senderName} size={10} style="micah" />
       <div
-        key={msg.messageid || `${msg.sender}-${msg.timestamp}`}
-        className={`flex items-end gap-2 ${isMine ? "flex-row-reverse" : ""}`}
+        className={`p-3 rounded-lg max-w-[70%] ${
+          isMine
+            ? "bg-blue-600 text-white ml-auto"
+            : "bg-white border text-slate-800"
+        }`}
       >
-        <Avatar seed={senderName} username={senderName} size={10} style="micah" />
-        <div
-          className={`p-3 rounded-lg max-w-[70%] ${
-            isMine
-              ? "bg-blue-600 text-white ml-auto"
-              : "bg-white border text-slate-800"
-          }`}
-        >
-          {!isMine && (
-            <div className="text-xs font-semibold text-slate-500 mb-1">
-              {senderName}
-            </div>
-          )}
+        {!isMine && (
+          <div className="text-xs font-semibold text-slate-500 mb-1">
+            {senderName}
+          </div>
+        )}
 
-          {msg.text && (
-            <div className="whitespace-pre-wrap break-words">{msg.text}</div>
-          )}
+        {msg.text && (
+          <div className="whitespace-pre-wrap break-words">{msg.text}</div>
+        )}
 
-          {/* 🖼️ Image / GIF */}
-          {fileUrl && isImage && (
-            <img
-              src={fileUrl}
-              alt="attachment"
-              className="max-h-64 rounded-lg border mt-2 object-contain shadow-sm"
-              onError={(e) => (e.target.style.display = "none")}
-            />
-          )}
+        {/* 🖼️ Images / GIFs */}
+        {fileUrl && isImage && (
+          <img
+            src={fileUrl}
+            alt="attachment"
+            loading="lazy"
+            className="max-h-64 rounded-lg border mt-2 object-contain shadow-sm cursor-pointer transition hover:scale-[1.02]"
+            onError={(e) => {
+              console.warn("⚠️ Image failed to load:", fileUrl);
+              e.target.style.display = "none";
+            }}
+          />
+        )}
 
-          {/* 📄 PDF / File */}
-          {fileUrl && (isPDF || isOtherFile) && (
-            <a
-              href={fileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`mt-2 flex items-center gap-2 px-3 py-2 rounded-md border transition ${
-                isMine
-                  ? "border-blue-400 bg-blue-700/40 hover:bg-blue-700/70 text-white"
-                  : "border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-800"
-              }`}
-            >
-              <FileText size={16} />
-              <span className="text-sm truncate">
-                {msg.attachmentKey?.split("/").pop() || "Download File"}
-              </span>
-            </a>
-          )}
-
-          <div
-            className={`text-xs mt-2 ${
-              isMine ? "text-blue-200" : "text-slate-500"
+        {/* 📄 PDFs / Other Files */}
+        {fileUrl && (isPDF || isOtherFile) && (
+          <a
+            href={fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`mt-2 flex items-center gap-2 px-3 py-2 rounded-md border transition ${
+              isMine
+                ? "border-blue-400 bg-blue-700/40 hover:bg-blue-700/70 text-white"
+                : "border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-800"
             }`}
           >
-            {time}
-          </div>
+            <FileText size={16} />
+            <span className="text-sm truncate">
+              {msg.attachmentKey?.split("/").pop() || "Download File"}
+            </span>
+          </a>
+        )}
+
+        <div
+          className={`text-xs mt-2 ${
+            isMine ? "text-blue-200" : "text-slate-500"
+          }`}
+        >
+          {time}
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
+
 
   /* ----------------------------------------------------
      RETURN LAYOUT
