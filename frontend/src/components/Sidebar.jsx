@@ -1,11 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { getMembers, API_BASE } from "../lib/api";
 import { Avatar } from "./Avatar";
-import { LogOut, Users, Plus, Trash2, X } from "lucide-react";
+import { LogOut, Users, Trash2, Plus, X } from "lucide-react";
 
-/* =========================================================
-   🧱 Sidebar Component
-========================================================= */
 export default function Sidebar({ onSelectUser, currentUser }) {
   const [members, setMembers] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -18,6 +15,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [groupName, setGroupName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [newMember, setNewMember] = useState("");
 
   const profileName = localStorage.getItem("profileName") || currentUser;
 
@@ -84,14 +82,13 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }, [currentUser]);
 
   /* =========================================================
-     Create Group Handler
+     Create Group
   ========================================================= */
   async function handleCreateGroup() {
     if (!groupName.trim() || selectedMembers.length === 0) {
       alert("Please provide a group name and select at least one member.");
       return;
     }
-
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/groups`, {
@@ -105,26 +102,24 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       });
       const data = await res.json();
       const parsed = typeof data?.body === "string" ? JSON.parse(data.body) : data;
-
       if (parsed?.success) {
-        alert("✅ Group created successfully!");
+        alert("✅ Group created!");
         setShowCreateModal(false);
         setGroupName("");
         setSelectedMembers([]);
         loadGroups();
       } else {
-        alert("⚠️ Failed to create group: " + (parsed?.message || "Unknown error"));
+        alert("⚠️ " + (parsed?.message || "Failed to create group"));
       }
     } catch (err) {
       console.error("❌ Group creation failed:", err);
-      alert("Error creating group");
     } finally {
       setLoading(false);
     }
   }
 
   /* =========================================================
-     Manage Group (Add/Remove)
+     Remove Member
   ========================================================= */
   async function handleRemoveMember(username) {
     if (!selectedGroup) return;
@@ -149,6 +144,38 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       } else alert("⚠️ " + (parsed?.message || "Failed to remove member"));
     } catch (err) {
       console.error("❌ Remove member failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* =========================================================
+     Add Member
+  ========================================================= */
+  async function handleAddMember() {
+    if (!selectedGroup || !newMember) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/groups/add`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupid: selectedGroup.groupid,
+          username: newMember,
+          requester: currentUser,
+        }),
+      });
+      const data = await res.json();
+      const parsed = typeof data?.body === "string" ? JSON.parse(data.body) : data;
+      if (parsed?.success) {
+        alert("✅ Member added");
+        setNewMember("");
+        loadGroups();
+      } else {
+        alert("⚠️ " + (parsed?.message || "Failed to add member"));
+      }
+    } catch (err) {
+      console.error("❌ Add member failed:", err);
     } finally {
       setLoading(false);
     }
@@ -229,9 +256,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
             ))}
           </div>
         ) : (
-          <p className="text-slate-400 text-sm italic">
-            No members found (debug: {members.length})
-          </p>
+          <p className="text-slate-400 text-sm italic">No members found</p>
         )}
       </div>
 
@@ -284,9 +309,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         )}
       </div>
 
-      {/* =======================================================
-          🧩 Create Group Modal
-      ======================================================= */}
+      {/* 🧩 Create Group Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg w-[400px] p-5">
@@ -315,14 +338,13 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                     type="checkbox"
                     value={m.userid}
                     checked={selectedMembers.includes(m.userid)}
-                    onChange={(e) => {
-                      if (e.target.checked)
-                        setSelectedMembers([...selectedMembers, m.userid]);
-                      else
-                        setSelectedMembers(
-                          selectedMembers.filter((u) => u !== m.userid)
-                        );
-                    }}
+                    onChange={(e) =>
+                      setSelectedMembers((prev) =>
+                        e.target.checked
+                          ? [...prev, m.userid]
+                          : prev.filter((u) => u !== m.userid)
+                      )
+                    }
                   />
                   {m.profileName}
                 </label>
@@ -340,9 +362,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         </div>
       )}
 
-      {/* =======================================================
-          🧩 Manage Group Modal
-      ======================================================= */}
+      {/* 🧩 Manage Group Modal */}
       {showManageModal && selectedGroup && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg w-[400px] p-5">
@@ -355,7 +375,8 @@ export default function Sidebar({ onSelectUser, currentUser }) {
               </button>
             </div>
 
-            <ul className="space-y-2">
+            {/* Existing Members */}
+            <ul className="space-y-2 mb-4">
               {selectedGroup.members?.map((m) => (
                 <li
                   key={m}
@@ -372,6 +393,35 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                 </li>
               ))}
             </ul>
+
+            {/* Add Member */}
+            <div className="flex gap-2 items-center">
+              <select
+                className="flex-1 border border-slate-300 rounded-md px-2 py-1 text-sm"
+                value={newMember}
+                onChange={(e) => setNewMember(e.target.value)}
+              >
+                <option value="">Select member to add</option>
+                {members
+                  .filter(
+                    (m) =>
+                      !selectedGroup.members?.includes(m.userid) &&
+                      m.userid !== currentUser
+                  )
+                  .map((m) => (
+                    <option key={m.userid} value={m.userid}>
+                      {m.profileName}
+                    </option>
+                  ))}
+              </select>
+              <button
+                onClick={handleAddMember}
+                disabled={loading}
+                className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
           </div>
         </div>
       )}
