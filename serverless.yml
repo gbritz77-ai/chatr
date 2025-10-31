@@ -53,16 +53,21 @@ provider:
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-typing-status
 
-        # ✅ S3 permissions
+        # ✅ S3 permissions (FULL + correct Resource separation)
         - Effect: Allow
           Action:
-            - s3:PutObject
-            - s3:GetObject
-            - s3:DeleteObject
+            - s3:ListBucket
           Resource:
             - arn:aws:s3:::outsec-chat-bucket
-            - arn:aws:s3:::outsec-chat-bucket/*
 
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:DeleteObject
+          Resource:
+            - arn:aws:s3:::outsec-chat-bucket/*
+          
         # ✅ CloudWatch logging
         - Effect: Allow
           Action:
@@ -137,19 +142,14 @@ functions:
   messages:
     handler: src/handlers/messages.handler
     events:
-      # Base route
       - http:
           path: messages
           method: any
           cors: true
-
-      # Proxy route (covers /messages/{anything})
       - http:
           path: messages/{proxy+}
           method: any
           cors: true
-
-      # ✅ Explicit route for unread counts (fixes 404)
       - http:
           path: messages/unread-counts
           method: get
@@ -176,12 +176,21 @@ functions:
           method: delete
           cors: true
 
-  # --- 📤 Pre-signed Upload ---
+  # --- 📤 Presigned Upload ---
   presignUpload:
     handler: src/handlers/presignUpload.handler
     events:
       - http:
           path: presign-upload
+          method: post
+          cors: true
+
+  # --- 📥 Presigned Download ---
+  presignDownload:
+    handler: src/handlers/presignDownload.handler
+    events:
+      - http:
+          path: presign-download
           method: post
           cors: true
 

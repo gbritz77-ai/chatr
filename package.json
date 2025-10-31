@@ -1,19 +1,17 @@
 {
-  "name": "chatr",
+  "name": "chatr-service",
   "version": "1.0.0",
-  "description": "��#\u0000 \u0000c\u0000h\u0000a\u0000t\u0000r\u0000\r\u0000 \u0000",
+  "description": "Serverless backend for CHATr app",
   "main": "index.js",
-  "directories": {
-    "doc": "docs",
-    "test": "tests"
-  },
-  "scripts": {
-    "dev": "node --no-warnings ./node_modules/serverless/bin/serverless.js offline",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
   "author": "Gerhard Britz",
   "license": "ISC",
+  "scripts": {
+    "dev": "node --no-warnings ./node_modules/serverless/bin/serverless.js offline",
+    "deploy": "serverless deploy --stage dev --region eu-west-2",
+    "remove": "serverless remove --stage dev --region eu-west-2",
+    "amplify:build": "npm ci && npx amplify pull --yes --env dev --force",
+    "test": "echo \"No tests yet\""
+  },
   "dependencies": {
     "aws-sdk": "^2.1692.0",
     "bcryptjs": "^3.0.2",
@@ -24,6 +22,7 @@
     "sharp": "^0.34.4"
   },
   "devDependencies": {
+    "@aws-amplify/cli": "14.2.0",
     "dotenv-cli": "^10.0.0",
     "serverless": "^3.40.0",
     "serverless-dotenv-plugin": "^6.0.0",
@@ -32,7 +31,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gbritz77-ai/chatr.git"
+    "url": "https://github.com/gbritz77-ai/chatr.git"
   },
   "bugs": {
     "url": "https://github.com/gbritz77-ai/chatr/issues"
