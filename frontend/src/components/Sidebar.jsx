@@ -1,39 +1,41 @@
 import React, { useEffect, useState } from "react";
 import { getMembers, API_BASE } from "../lib/api";
 import { Avatar } from "./Avatar";
-import { LogOut, Users, Settings } from "lucide-react";
+import { LogOut, Users, Plus, Trash2, X } from "lucide-react";
 
+/* =========================================================
+   🧱 Sidebar Component
+========================================================= */
 export default function Sidebar({ onSelectUser, currentUser }) {
   const [members, setMembers] = useState([]);
   const [groups, setGroups] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
   const [unreadMap, setUnreadMap] = useState({});
   const [search, setSearch] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showManageModal, setShowManageModal] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [selectedMembers, setSelectedMembers] = useState([]);
+  const [groupName, setGroupName] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const profileName = localStorage.getItem("profileName") || currentUser;
 
   /* =========================================================
-     Load Members (robust + debug)
+     Load Members
   ========================================================= */
   useEffect(() => {
     async function loadMembers() {
-      console.log("👥 [Sidebar] Loading members for:", currentUser);
       try {
         const res = await getMembers();
-        console.log("📦 Raw members response:", res);
+        const data =
+          typeof res === "string"
+            ? JSON.parse(res)
+            : typeof res?.body === "string"
+            ? JSON.parse(res.body)
+            : res;
 
-        let data;
-        if (typeof res === "string") data = JSON.parse(res);
-        else if (typeof res?.body === "string") data = JSON.parse(res.body);
-        else data = res;
-
-        // Handle both members[] and data[]
-        const membersData =
-          data?.members || data?.data || data?.Items || [];
-
-        console.log("📊 Members count:", membersData.length);
-        console.log("🧩 currentUser:", currentUser, "| profileName:", profileName);
-
+        const membersData = data?.members || data?.data || data?.Items || [];
         const filtered = membersData.filter((m) => {
           const uid = (m.userid || "").toLowerCase();
           const pname = (m.profileName || "").toLowerCase();
@@ -41,24 +43,19 @@ export default function Sidebar({ onSelectUser, currentUser }) {
           const prof = (profileName || "").toLowerCase();
           return uid !== cur && pname !== prof;
         });
-
-        console.log("✅ Filtered members:", filtered);
         setMembers(filtered);
       } catch (err) {
         console.error("❌ Failed to fetch members:", err);
       }
     }
-
     loadMembers();
   }, [currentUser]);
 
   /* =========================================================
-     Load Groups (robust + debug)
+     Load Groups
   ========================================================= */
   async function loadGroups() {
     if (!currentUser) return;
-    console.log("📡 [Sidebar] Fetching groups for:", currentUser);
-
     try {
       const res = await fetch(
         `${API_BASE}/groups?username=${encodeURIComponent(currentUser)}`
@@ -67,16 +64,12 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       const data = typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
 
       if (data?.success) {
-        const normalized = (Array.isArray(data.groups) ? data.groups : []).map(
-          (g) => ({
-            ...g,
-            groupName: g.groupName || g.groupname || "",
-          })
-        );
-        console.log("✅ [Sidebar] Loaded groups:", normalized);
+        const normalized = (data.groups || []).map((g) => ({
+          ...g,
+          groupName: g.groupName || g.groupname || "",
+        }));
         setGroups(normalized);
       } else {
-        console.warn("⚠️ [Sidebar] Groups API returned no success:", data);
         setGroups([]);
       }
     } catch (err) {
@@ -91,12 +84,82 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }, [currentUser]);
 
   /* =========================================================
+     Create Group Handler
+  ========================================================= */
+  async function handleCreateGroup() {
+    if (!groupName.trim() || selectedMembers.length === 0) {
+      alert("Please provide a group name and select at least one member.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/groups`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupName,
+          creator: currentUser,
+          members: selectedMembers,
+        }),
+      });
+      const data = await res.json();
+      const parsed = typeof data?.body === "string" ? JSON.parse(data.body) : data;
+
+      if (parsed?.success) {
+        alert("✅ Group created successfully!");
+        setShowCreateModal(false);
+        setGroupName("");
+        setSelectedMembers([]);
+        loadGroups();
+      } else {
+        alert("⚠️ Failed to create group: " + (parsed?.message || "Unknown error"));
+      }
+    } catch (err) {
+      console.error("❌ Group creation failed:", err);
+      alert("Error creating group");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* =========================================================
+     Manage Group (Add/Remove)
+  ========================================================= */
+  async function handleRemoveMember(username) {
+    if (!selectedGroup) return;
+    if (!window.confirm(`Remove ${username} from ${selectedGroup.groupName}?`))
+      return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/groups/remove`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupid: selectedGroup.groupid,
+          username,
+          requester: currentUser,
+        }),
+      });
+      const data = await res.json();
+      const parsed = typeof data?.body === "string" ? JSON.parse(data.body) : data;
+      if (parsed?.success) {
+        alert("✅ Member removed");
+        loadGroups();
+      } else alert("⚠️ " + (parsed?.message || "Failed to remove member"));
+    } catch (err) {
+      console.error("❌ Remove member failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* =========================================================
      Render
   ========================================================= */
   const filteredGroups = groups.filter((g) =>
     g.groupName?.toLowerCase().includes(search.toLowerCase())
   );
-
   const filteredMembers = members.filter((m) =>
     m.profileName?.toLowerCase().includes(search.toLowerCase())
   );
@@ -138,11 +201,9 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         />
       </div>
 
-      {/* Members List */}
+      {/* Members */}
       <div className="p-3 border-b">
-        <h2 className="font-semibold text-slate-600 text-sm flex items-center gap-1 mb-2">
-          👤 Members
-        </h2>
+        <h2 className="font-semibold text-slate-600 text-sm mb-2">👤 Members</h2>
         {filteredMembers.length ? (
           <div className="space-y-1">
             {filteredMembers.map((m) => (
@@ -163,9 +224,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                 }`}
               >
                 <Avatar name={m.profileName} size={2.2} />
-                <span className="text-sm font-medium truncate">
-                  {m.profileName}
-                </span>
+                <span className="text-sm font-medium truncate">{m.profileName}</span>
               </button>
             ))}
           </div>
@@ -176,14 +235,14 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         )}
       </div>
 
-      {/* Groups List */}
+      {/* Groups */}
       <div className="flex-1 overflow-y-auto p-3">
         <div className="flex items-center justify-between mb-2">
           <h2 className="font-semibold text-slate-600 text-sm flex items-center gap-1">
             <Users size={14} /> Groups
           </h2>
           <button
-            onClick={() => alert("🧩 Group creation modal coming soon")}
+            onClick={() => setShowCreateModal(true)}
             className="text-xs bg-gray-800 text-white px-2 py-1 rounded-md hover:bg-gray-700"
           >
             + Create
@@ -192,53 +251,130 @@ export default function Sidebar({ onSelectUser, currentUser }) {
 
         {filteredGroups.length ? (
           <div className="space-y-2">
-            {filteredGroups.map((g) => {
-              const key = `GROUP#${g.groupid}`;
-              const unread = unreadMap[key] || 0;
-              return (
-                <button
-                  key={g.groupid}
-                  onClick={() => {
-                    setActiveChat(`group-${g.groupid}`);
-                    setUnreadMap((prev) => ({ ...prev, [key]: 0 }));
-                    onSelectUser({
-                      type: "group",
-                      id: g.groupid,
-                      name: g.groupName,
-                    });
-                  }}
-                  className={`flex w-full text-left px-3 py-2 rounded-md items-center gap-3 transition ${
-                    activeChat === `group-${g.groupid}`
-                      ? "bg-gray-100 text-gray-900"
-                      : "hover:bg-gray-50"
-                  }`}
-                >
-                  <Avatar name={g.groupName} size={2.5} />
-                  <div className="flex-1">
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium text-sm truncate">
-                        {g.groupName}
-                      </span>
-                      {unread > 0 && (
-                        <span className="bg-gray-800 text-white text-xs px-2 py-0.5 rounded-full">
-                          {unread}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      {g.members?.length || 0} members
-                    </div>
+            {filteredGroups.map((g) => (
+              <button
+                key={g.groupid}
+                onClick={() => {
+                  setActiveChat(`group-${g.groupid}`);
+                  onSelectUser({ type: "group", id: g.groupid, name: g.groupName });
+                  setSelectedGroup(g);
+                }}
+                onDoubleClick={() => {
+                  setSelectedGroup(g);
+                  setShowManageModal(true);
+                }}
+                className={`flex w-full text-left px-3 py-2 rounded-md items-center gap-3 transition ${
+                  activeChat === `group-${g.groupid}`
+                    ? "bg-gray-100 text-gray-900"
+                    : "hover:bg-gray-50"
+                }`}
+              >
+                <Avatar name={g.groupName} size={2.5} />
+                <div className="flex-1">
+                  <span className="font-medium text-sm truncate">{g.groupName}</span>
+                  <div className="text-xs text-slate-500">
+                    {g.members?.length || 0} members
                   </div>
-                </button>
-              );
-            })}
+                </div>
+              </button>
+            ))}
           </div>
         ) : (
-          <p className="text-slate-400 text-sm italic">
-            No groups yet (debug: {groups.length})
-          </p>
+          <p className="text-slate-400 text-sm italic">No groups yet</p>
         )}
       </div>
+
+      {/* =======================================================
+          🧩 Create Group Modal
+      ======================================================= */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg w-[400px] p-5">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-semibold text-lg">Create Group</h2>
+              <button onClick={() => setShowCreateModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Group Name"
+              className="w-full border border-slate-300 rounded-md px-3 py-2 mb-3 text-sm"
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+            />
+
+            <div className="h-40 overflow-y-auto border border-slate-200 rounded-md p-2">
+              {members.map((m) => (
+                <label
+                  key={m.userid}
+                  className="flex items-center gap-2 text-sm mb-1"
+                >
+                  <input
+                    type="checkbox"
+                    value={m.userid}
+                    checked={selectedMembers.includes(m.userid)}
+                    onChange={(e) => {
+                      if (e.target.checked)
+                        setSelectedMembers([...selectedMembers, m.userid]);
+                      else
+                        setSelectedMembers(
+                          selectedMembers.filter((u) => u !== m.userid)
+                        );
+                    }}
+                  />
+                  {m.profileName}
+                </label>
+              ))}
+            </div>
+
+            <button
+              onClick={handleCreateGroup}
+              disabled={loading}
+              className="mt-3 w-full bg-gray-800 text-white rounded-md py-2 text-sm hover:bg-gray-700"
+            >
+              {loading ? "Creating..." : "Create Group"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* =======================================================
+          🧩 Manage Group Modal
+      ======================================================= */}
+      {showManageModal && selectedGroup && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg w-[400px] p-5">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-semibold text-lg">
+                Manage: {selectedGroup.groupName}
+              </h2>
+              <button onClick={() => setShowManageModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <ul className="space-y-2">
+              {selectedGroup.members?.map((m) => (
+                <li
+                  key={m}
+                  className="flex justify-between items-center text-sm border-b pb-1"
+                >
+                  {m}
+                  <button
+                    onClick={() => handleRemoveMember(m)}
+                    className="text-red-500 hover:text-red-700"
+                    title="Remove member"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
