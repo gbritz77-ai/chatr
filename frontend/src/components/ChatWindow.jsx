@@ -227,7 +227,20 @@ export default function ChatWindow({ activeUser, currentUser }) {
       setUploading(false);
     }
   }
-
+async function getSignedUrl(fileKey) {
+  try {
+    const res = await fetch(`${import.meta.env.VITE_API_BASE}/presign-download`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: fileKey }),
+    });
+    const data = await res.json();
+    return data?.viewURL || null;
+  } catch (err) {
+    console.error("❌ Failed to get signed download URL:", err);
+    return null;
+  }
+}
   /* ----------------------------------------------------
      RENDER MESSAGES (attachments included)
   ---------------------------------------------------- */
@@ -247,22 +260,25 @@ function renderBubble(msg) {
     minute: "2-digit",
   });
 
-  const fileUrl =
-    msg.attachmentUrl ||
-    (msg.attachmentKey ? `${S3_BUCKET_URL}/${msg.attachmentKey}` : null);
-
-  // ✅ Robust file-type detection (by MIME + extension)
   const fileType = msg.attachmentType || "";
   const fileName = (msg.attachmentKey || msg.attachmentUrl || "").toLowerCase();
-
   const isImage =
     fileType.startsWith("image/") ||
     /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
-
   const isPDF =
     fileType === "application/pdf" || fileName.endsWith(".pdf");
+  const isOtherFile = msg.attachmentKey && !isImage && !isPDF;
 
-  const isOtherFile = fileUrl && !isImage && !isPDF;
+  // 🧠 State for the resolved signed URL
+  const [viewUrl, setViewUrl] = useState(msg.attachmentUrl || null);
+
+  useEffect(() => {
+    if (!viewUrl && msg.attachmentKey) {
+      getSignedUrl(msg.attachmentKey).then((url) => {
+        if (url) setViewUrl(url);
+      });
+    }
+  }, [msg.attachmentKey, viewUrl]);
 
   return (
     <div
@@ -287,24 +303,24 @@ function renderBubble(msg) {
           <div className="whitespace-pre-wrap break-words">{msg.text}</div>
         )}
 
-        {/* 🖼️ Show inline image or GIF */}
-        {fileUrl && isImage && (
+        {/* 🖼️ Show image or GIF */}
+        {viewUrl && isImage && (
           <img
-            src={fileUrl}
+            src={viewUrl}
             alt="attachment"
             loading="lazy"
             className="max-h-64 rounded-lg border mt-2 object-contain shadow-sm cursor-pointer transition hover:scale-[1.02]"
             onError={(e) => {
-              console.warn("⚠️ Image failed to load:", fileUrl);
+              console.warn("⚠️ Image failed to load:", viewUrl);
               e.target.style.display = "none";
             }}
           />
         )}
 
-        {/* 📄 PDF or Other File */}
-        {fileUrl && (isPDF || isOtherFile) && (
+        {/* 📄 PDF / Other file */}
+        {viewUrl && (isPDF || isOtherFile) && (
           <a
-            href={fileUrl}
+            href={viewUrl}
             target="_blank"
             rel="noopener noreferrer"
             className={`mt-2 flex items-center gap-2 px-3 py-2 rounded-md border transition ${
@@ -331,6 +347,7 @@ function renderBubble(msg) {
     </div>
   );
 }
+
 
 
 
