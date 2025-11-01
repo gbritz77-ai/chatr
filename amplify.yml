@@ -5,22 +5,24 @@ applications:
       phases:
         preBuild:
           commands:
-            - echo "📂 Changing directory to frontend"
-            - cd frontend
+            - echo "🧭 preBuild PWD:"
+            - pwd
+            - ls -la
             - nvm install 20
             - nvm use 20
             - npm ci
             - npm install -g @aws-amplify/cli
             - |
-              echo "⚙️ Pulling Amplify env: dev"
+              echo "⚙️ amplify pull (dev)"
               amplify pull --yes --env dev \
               --amplify '{ "envName": "dev" }' \
               --frontend '{ "frontend": "javascript", "framework": "none", "config": {} }' \
               --providers '{ "awscloudformation": { "configLevel": "project" } }'
         build:
           commands:
-            - echo "🚀 Building app from /frontend"
-            - cd frontend
+            - echo "🚀 build PWD:"
+            - pwd
+            - ls -la
             - npm run build
       artifacts:
         baseDirectory: dist
