@@ -9,7 +9,6 @@ applications:
             - nvm use 20
             - npm ci
             - npm install -g @aws-amplify/cli
-            # ✅ Pull environment safely (fixes dynamic import callback error)
             - |
               amplify pull --yes --env dev \
               --amplify '{ "envName": "dev" }' \
