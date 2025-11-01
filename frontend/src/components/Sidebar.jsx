@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { getMembers, API_BASE } from "../lib/api";
 import { Avatar } from "./Avatar";
-import { LogOut, Users } from "lucide-react";
+import { LogOut, Users, Trash2, Plus, Edit3, X } from "lucide-react";
 
 export default function Sidebar({ onSelectUser, currentUser }) {
   const [members, setMembers] = useState([]);
@@ -18,9 +18,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   const [newMember, setNewMember] = useState("");
 
   const profileName = localStorage.getItem("profileName") || currentUser;
-
-  // 🧩 Fix: useRef to preserve click timeout between renders
-  const clickTimerRef = useRef(null);
 
   /* =========================================================
      Load Members
@@ -112,7 +109,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }, [currentUser]);
 
   /* =========================================================
-     Create / Manage Groups
+     Group Management
   ========================================================= */
   async function handleCreateGroup() {
     if (!groupName.trim() || selectedMembers.length === 0) {
@@ -208,6 +205,39 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     }
   }
 
+  async function handleDeleteGroup() {
+    if (!selectedGroup) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedGroup.groupName}?`))
+      return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/groups/delete`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupid: selectedGroup.groupid,
+          requester: currentUser,
+        }),
+      });
+      const data = await res.json();
+      const parsed =
+        typeof data?.body === "string" ? JSON.parse(data.body) : data;
+      if (parsed?.success) {
+        alert("🗑️ Group deleted");
+        setShowManageModal(false);
+        setSelectedGroup(null);
+        loadGroups();
+      } else {
+        alert("⚠️ " + (parsed?.message || "Failed to delete group"));
+      }
+    } catch (err) {
+      console.error("❌ Delete group failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   /* =========================================================
      Utility
   ========================================================= */
@@ -224,32 +254,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   const filteredMembers = members.filter((m) =>
     m.profileName?.toLowerCase().includes(search.toLowerCase())
   );
-
-  /* =========================================================
-     ✅ Fixed handleGroupClick with stable double-click detection
-  ========================================================= */
-  function handleGroupClick(e, g, chatKey) {
-    if (clickTimerRef.current) {
-      // 🚀 Double-click detected
-      clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-      setSelectedGroup(g);
-      setShowManageModal(true);
-    } else {
-      // 🖱 Single-click (open chat)
-      clickTimerRef.current = setTimeout(() => {
-        clickTimerRef.current = null;
-        setActiveChat(`group-${g.groupid}`);
-        setUnreadMap((prev) => ({ ...prev, [chatKey]: 0 }));
-        onSelectUser({
-          type: "group",
-          id: g.groupid,
-          name: g.groupName,
-        });
-        setSelectedGroup(g);
-      }, 250);
-    }
-  }
 
   /* =========================================================
      Render
@@ -357,18 +361,24 @@ export default function Sidebar({ onSelectUser, currentUser }) {
               const chatKey = `GROUP#${g.groupid}`;
               const unread = unreadMap[chatKey] || 0;
               return (
-                <button
+                <div
                   key={g.groupid}
-                  onClick={(e) => handleGroupClick(e, g, chatKey)}
-                  title="Double-click to manage members"
-                  className={`flex w-full text-left px-3 py-2 rounded-md items-center gap-3 transition ${
-                    activeChat === `group-${g.groupid}`
-                      ? "bg-gray-100 text-gray-900"
-                      : "hover:bg-gray-50"
-                  }`}
+                  className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-gray-50 transition"
                 >
-                  <Avatar name={g.groupName} size={2.5} />
-                  <div className="flex-1 flex justify-between items-center">
+                  <div
+                    onClick={() => {
+                      setActiveChat(`group-${g.groupid}`);
+                      setUnreadMap((prev) => ({ ...prev, [chatKey]: 0 }));
+                      onSelectUser({
+                        type: "group",
+                        id: g.groupid,
+                        name: g.groupName,
+                      });
+                      setSelectedGroup(g);
+                    }}
+                    className="flex items-center gap-3 cursor-pointer flex-1"
+                  >
+                    <Avatar name={g.groupName} size={2.5} />
                     <div>
                       <div className="font-medium text-sm truncate">
                         {g.groupName}
@@ -377,13 +387,19 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                         {g.members?.length || 0} members
                       </div>
                     </div>
-                    {unread > 0 && (
-                      <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">
-                        {unread}
-                      </span>
-                    )}
                   </div>
-                </button>
+
+                  <button
+                    onClick={() => {
+                      setSelectedGroup(g);
+                      setShowManageModal(true);
+                    }}
+                    title="Edit group"
+                    className="ml-2 text-gray-600 hover:text-blue-600"
+                  >
+                    <Edit3 size={16} />
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -391,6 +407,74 @@ export default function Sidebar({ onSelectUser, currentUser }) {
           <p className="text-slate-400 text-sm italic">No groups yet</p>
         )}
       </div>
+
+      {/* =======================================================
+          🧩 Manage Group Modal
+      ======================================================= */}
+      {showManageModal && selectedGroup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-[420px] p-5 relative">
+            <button
+              onClick={() => setShowManageModal(false)}
+              className="absolute top-3 right-3 text-gray-500 hover:text-red-500"
+            >
+              <X size={18} />
+            </button>
+            <h3 className="text-lg font-semibold mb-3">
+              Edit Group: {selectedGroup.groupName}
+            </h3>
+
+            <h4 className="text-sm font-medium text-gray-600 mb-1">
+              Members:
+            </h4>
+            <ul className="border rounded-md mb-3 max-h-[120px] overflow-y-auto">
+              {selectedGroup.members?.length ? (
+                selectedGroup.members.map((m) => (
+                  <li
+                    key={m}
+                    className="flex justify-between items-center border-b px-3 py-2 text-sm"
+                  >
+                    <span>{m}</span>
+                    <button
+                      onClick={() => handleRemoveMember(m)}
+                      className="text-red-500 hover:text-red-700 text-xs"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))
+              ) : (
+                <li className="text-gray-400 italic px-3 py-2 text-sm">
+                  No members
+                </li>
+              )}
+            </ul>
+
+            <div className="flex items-center gap-2 mb-3">
+              <input
+                type="text"
+                placeholder="Enter username"
+                value={newMember}
+                onChange={(e) => setNewMember(e.target.value)}
+                className="flex-1 text-sm border rounded-md px-2 py-1"
+              />
+              <button
+                onClick={handleAddMember}
+                className="bg-blue-600 text-white text-xs px-3 py-1 rounded-md hover:bg-blue-700"
+              >
+                <Plus size={12} className="inline-block mr-1" /> Add
+              </button>
+            </div>
+
+            <button
+              onClick={handleDeleteGroup}
+              className="bg-red-600 text-white text-sm px-3 py-2 rounded-md hover:bg-red-700 w-full flex justify-center items-center gap-2"
+            >
+              <Trash2 size={14} /> Delete Group
+            </button>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
