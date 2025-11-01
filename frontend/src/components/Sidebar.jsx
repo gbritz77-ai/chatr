@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getMembers, API_BASE } from "../lib/api";
 import { Avatar } from "./Avatar";
-import { LogOut, Users, Trash2, Plus, X } from "lucide-react";
+import { LogOut, Users } from "lucide-react";
 
 export default function Sidebar({ onSelectUser, currentUser }) {
   const [members, setMembers] = useState([]);
@@ -128,7 +128,8 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         }),
       });
       const data = await res.json();
-      const parsed = typeof data?.body === "string" ? JSON.parse(data.body) : data;
+      const parsed =
+        typeof data?.body === "string" ? JSON.parse(data.body) : data;
       if (parsed?.success) {
         alert("✅ Group created!");
         setShowCreateModal(false);
@@ -161,7 +162,8 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         }),
       });
       const data = await res.json();
-      const parsed = typeof data?.body === "string" ? JSON.parse(data.body) : data;
+      const parsed =
+        typeof data?.body === "string" ? JSON.parse(data.body) : data;
       if (parsed?.success) {
         alert("✅ Member removed");
         loadGroups();
@@ -187,7 +189,8 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         }),
       });
       const data = await res.json();
-      const parsed = typeof data?.body === "string" ? JSON.parse(data.body) : data;
+      const parsed =
+        typeof data?.body === "string" ? JSON.parse(data.body) : data;
       if (parsed?.success) {
         alert("✅ Member added");
         setNewMember("");
@@ -203,8 +206,15 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }
 
   /* =========================================================
-     Render Lists
+     Utility
   ========================================================= */
+  const getChatKey = (type, id, otherUser) =>
+    type === "group"
+      ? `GROUP#${id}`
+      : `CHAT#${[currentUser, otherUser]
+          .sort((a, b) => a.localeCompare(b))
+          .join("#")}`;
+
   const filteredGroups = groups.filter((g) =>
     g.groupName?.toLowerCase().includes(search.toLowerCase())
   );
@@ -212,12 +222,33 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     m.profileName?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const getChatKey = (type, id, otherUser) =>
-    type === "group"
-      ? `GROUP#${id}`
-      : `CHAT#${[currentUser, otherUser]
-          .sort((a, b) => a.localeCompare(b))
-          .join("#")}`;
+  /* =========================================================
+     Handle group click / double-click
+  ========================================================= */
+  let clickTimeout = null;
+
+  function handleGroupClick(e, g, chatKey) {
+    if (clickTimeout) {
+      clearTimeout(clickTimeout);
+      clickTimeout = null;
+      // 🚀 Double-click detected
+      setSelectedGroup(g);
+      setShowManageModal(true);
+    } else {
+      clickTimeout = setTimeout(() => {
+        // 🖱️ Single click (open chat)
+        setActiveChat(`group-${g.groupid}`);
+        setUnreadMap((prev) => ({ ...prev, [chatKey]: 0 }));
+        onSelectUser({
+          type: "group",
+          id: g.groupid,
+          name: g.groupName,
+        });
+        setSelectedGroup(g);
+        clickTimeout = null;
+      }, 250);
+    }
+  }
 
   /* =========================================================
      Render
@@ -327,20 +358,8 @@ export default function Sidebar({ onSelectUser, currentUser }) {
               return (
                 <button
                   key={g.groupid}
-                  onClick={() => {
-                    setActiveChat(`group-${g.groupid}`);
-                    setUnreadMap((prev) => ({ ...prev, [chatKey]: 0 }));
-                    onSelectUser({
-                      type: "group",
-                      id: g.groupid,
-                      name: g.groupName,
-                    });
-                    setSelectedGroup(g);
-                  }}
-                  onDoubleClick={() => {
-                    setSelectedGroup(g);
-                    setShowManageModal(true);
-                  }}
+                  onClick={(e) => handleGroupClick(e, g, chatKey)}
+                  title="Double-click to manage members"
                   className={`flex w-full text-left px-3 py-2 rounded-md items-center gap-3 transition ${
                     activeChat === `group-${g.groupid}`
                       ? "bg-gray-100 text-gray-900"
@@ -372,8 +391,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         )}
       </div>
 
-      {/* 🧩 Create & Manage Group Modals — unchanged */}
-      {/* (keep your original modal code here) */}
+      {/* 🧩 Create & Manage Group Modals (keep your existing modals below) */}
     </aside>
   );
 }
