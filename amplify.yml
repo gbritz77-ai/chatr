@@ -7,6 +7,7 @@ applications:
           commands:
             - nvm install 20
             - nvm use 20
+            - cd frontend
             - npm ci
             - npm install -g @aws-amplify/cli
             - |
@@ -16,6 +17,7 @@ applications:
               --providers '{ "awscloudformation": { "configLevel": "project" } }'
         build:
           commands:
+            - cd frontend
             - npm run build
       artifacts:
         baseDirectory: dist
@@ -23,4 +25,4 @@ applications:
           - '**/*'
       cache:
         paths:
-          - node_modules/**/*
+          - frontend/node_modules/**/*
