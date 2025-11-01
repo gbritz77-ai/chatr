@@ -1,34 +1,73 @@
-# Node / JS build artifacts
+# ============================================================
+# 🧱 Node / JS build artifacts
+# ============================================================
 node_modules/
 dist/
 build/
 coverage/
+.tmp/
+.cache/
 
-# Local environment files
+# ============================================================
+# ⚙️ Local environment files
+# ============================================================
 .env
 .env.*
 *.local
+.envrc
 
-# AWS keys / credentials / deploy artifacts
+# ============================================================
+# 🔑 AWS keys / credentials / deploy artifacts
+# ============================================================
 *.csv
 *.pem
 *.key
 *accessKeys.csv
 *secret*.txt
 .aws/
+.aws-sam/
+.serverless/
+.amplify/
+amplify/.config/local-env-info.json
+amplify/#current-cloud-backend/
+amplify/backend/amplify-meta.json
+amplify/backend/tags.json
+amplify/backend/.temp/
+src/amplifyconfiguration.json
+src/aws-exports.js
 
-# Logs & OS junk
+# ============================================================
+# 🧩 Logs & OS junk
+# ============================================================
 *.log
 npm-debug.log*
 yarn-debug.log*
+pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
-# VS Code / IDE configs
+# ============================================================
+# 💻 VS Code / IDE configs
+# ============================================================
 .vscode/
 .idea/
+*.swp
 
-# Local Serverless / Amplify / temp files
-.serverless/
-.amplify/
-.aws-sam/
+# ============================================================
+# 🚀 Vite / Frontend cache
+# ============================================================
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.cache/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.production.local
+frontend/.env.test.local
+
+# ============================================================
+# 🧰 Miscellaneous
+# ============================================================
+*.zip
+*.tar.gz
+*.tgz
