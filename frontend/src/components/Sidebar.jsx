@@ -450,21 +450,39 @@ export default function Sidebar({ onSelectUser, currentUser }) {
               )}
             </ul>
 
+            {/* Add Member Dropdown */}
             <div className="flex items-center gap-2 mb-3">
-              <input
-                type="text"
-                placeholder="Enter username"
+              <select
                 value={newMember}
                 onChange={(e) => setNewMember(e.target.value)}
                 className="flex-1 text-sm border rounded-md px-2 py-1"
-              />
+              >
+                <option value="">Select a member to add</option>
+                {members
+                  .filter(
+                    (m) =>
+                      !selectedGroup.members?.includes(m.userid) &&
+                      m.userid !== currentUser
+                  )
+                  .map((m) => (
+                    <option key={m.userid} value={m.userid}>
+                      {m.profileName || m.userid}
+                    </option>
+                  ))}
+              </select>
               <button
                 onClick={handleAddMember}
-                className="bg-blue-600 text-white text-xs px-3 py-1 rounded-md hover:bg-blue-700"
+                disabled={!newMember}
+                className={`${
+                  newMember
+                    ? "bg-blue-600 hover:bg-blue-700"
+                    : "bg-gray-300 cursor-not-allowed"
+                } text-white text-xs px-3 py-1 rounded-md flex items-center`}
               >
                 <Plus size={12} className="inline-block mr-1" /> Add
               </button>
             </div>
+
 
             <button
               onClick={handleDeleteGroup}
