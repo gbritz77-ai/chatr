@@ -112,39 +112,81 @@ export default function Sidebar({ onSelectUser, currentUser }) {
      Group Management
   ========================================================= */
   async function handleCreateGroup() {
-    if (!groupName.trim() || selectedMembers.length === 0) {
-      alert("Please provide a group name and select at least one member.");
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/groups`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          groupName,
-          creator: currentUser,
-          members: selectedMembers,
-        }),
-      });
-      const data = await res.json();
-      const parsed =
-        typeof data?.body === "string" ? JSON.parse(data.body) : data;
-      if (parsed?.success) {
-        alert("✅ Group created!");
-        setShowCreateModal(false);
-        setGroupName("");
-        setSelectedMembers([]);
-        loadGroups();
-      } else {
-        alert("⚠️ " + (parsed?.message || "Failed to create group"));
-      }
-    } catch (err) {
-      console.error("❌ Group creation failed:", err);
-    } finally {
-      setLoading(false);
-    }
+  if (!groupName.trim() || selectedMembers.length === 0) {
+    console.warn("⚠️ Missing required fields:", {
+      groupName,
+      selectedMembers,
+    });
+    alert("Please provide a group name and select at least one member.");
+    return;
   }
+
+  console.log("🟢 Starting group creation...", {
+    API_BASE,
+    groupName,
+    creator: currentUser,
+    selectedMembers,
+  });
+
+  setLoading(true);
+
+  try {
+    // 🔹 Prepare request body
+    const payload = {
+      groupName,
+      creator: currentUser,
+      members: selectedMembers,
+    };
+
+    console.log("📤 Sending POST /groups request:", payload);
+
+    // 🔹 Send request
+    const res = await fetch(`${API_BASE}/groups`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    console.log("📥 Raw response:", res);
+
+    // 🔹 Parse response
+    const text = await res.text();
+    console.log("📦 Raw response text:", text);
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      console.error("❌ Failed to parse JSON:", text);
+      throw new Error("Invalid JSON response from API");
+    }
+
+    const parsed =
+      typeof data?.body === "string" ? JSON.parse(data.body) : data;
+
+    console.log("✅ Parsed response:", parsed);
+
+    // 🔹 Handle result
+    if (parsed?.success) {
+      console.log("🎉 Group successfully created:", parsed.group || parsed);
+      alert("✅ Group created!");
+      setShowCreateModal(false);
+      setGroupName("");
+      setSelectedMembers([]);
+      loadGroups();
+    } else {
+      console.warn("⚠️ Group creation failed:", parsed);
+      alert("⚠️ " + (parsed?.message || "Failed to create group"));
+    }
+  } catch (err) {
+    console.error("❌ Group creation failed:", err);
+    alert("❌ Failed to create group — check console for details.");
+  } finally {
+    console.log("⏹️ Group creation process finished");
+    setLoading(false);
+  }
+}
+
 
   async function handleRemoveMember(username) {
     if (!selectedGroup) return;
