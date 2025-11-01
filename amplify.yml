@@ -1,19 +1,26 @@
 version: 1
-frontend:
-  phases:
-    preBuild:
-      commands:
-        - cd frontend
-        - npm install --legacy-peer-deps
-        # fix vite permission issue
-        - chmod +x node_modules/.bin/vite
-    build:
-      commands:
-        - npm run build
-  artifacts:
-    baseDirectory: frontend/dist
-    files:
-      - '**/*'
-  cache:
-    paths:
-      - frontend/node_modules/**/*
+applications:
+  - appRoot: frontend
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            # ✅ Match Node 20 used in serverless.yml
+            - nvm install 20
+            - nvm use 20
+            - npm ci
+            - npm install -g @aws-amplify/cli
+            # ✅ Pull environment safely (fixes dynamic import callback error)
+            - amplify pull --yes --env dev --amplify "{ \"envName\":\"dev\" }" \
+                --frontend "{ \"frontend\":\"javascript\",\"framework\":\"none\",\"config\":{}}" \
+                --providers "{ \"awscloudformation\": {\"configLevel\":\"project\"}}"
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*

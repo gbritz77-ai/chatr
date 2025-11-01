@@ -53,7 +53,7 @@ provider:
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-typing-status
 
-        # ✅ S3 permissions (FULL + correct Resource separation)
+        # ✅ S3 permissions
         - Effect: Allow
           Action:
             - s3:ListBucket
@@ -67,8 +67,8 @@ provider:
             - s3:DeleteObject
           Resource:
             - arn:aws:s3:::outsec-chat-bucket/*
-          
-        # ✅ CloudWatch logging
+
+        # ✅ CloudWatch logs
         - Effect: Allow
           Action:
             - logs:CreateLogGroup
