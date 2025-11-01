@@ -5,15 +5,13 @@ applications:
       phases:
         preBuild:
           commands:
-            # ✅ Match Node 20 used in serverless.yml
+            # ✅ Match Node version with backend
             - nvm install 20
             - nvm use 20
             - npm ci
             - npm install -g @aws-amplify/cli
             # ✅ Pull environment safely (fixes dynamic import callback error)
-            - amplify pull --yes --env dev --amplify "{ \"envName\":\"dev\" }" \
-                --frontend "{ \"frontend\":\"javascript\",\"framework\":\"none\",\"config\":{}}" \
-                --providers "{ \"awscloudformation\": {\"configLevel\":\"project\"}}"
+            - amplify pull --yes --env dev --amplify "{ \"envName\": \"dev\" }" --frontend "{ \"frontend\": \"javascript\", \"framework\": \"none\", \"config\": {}}" --providers "{ \"awscloudformation\": {\"configLevel\": \"project\"}}"
         build:
           commands:
             - npm run build
