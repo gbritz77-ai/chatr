@@ -5,29 +5,26 @@ applications:
       phases:
         preBuild:
           commands:
-            - echo "🧭 preBuild PWD:"
-            - pwd
-            - ls -la
+            - echo "🧹 Cleaning previous install..."
+            - rm -rf node_modules package-lock.json
+            - echo "🧩 Installing Node.js 20.x..."
             - nvm install 20
             - nvm use 20
-            - npm ci
+            - echo "📦 Installing dependencies..."
+            - npm install -g npm@9
             - npm install -g @aws-amplify/cli
-            - |
-              echo "⚙️ amplify pull (dev)"
-              amplify pull --yes --env dev \
-              --amplify '{ "envName": "dev" }' \
-              --frontend '{ "frontend": "javascript", "framework": "none", "config": {} }' \
-              --providers '{ "awscloudformation": { "configLevel": "project" } }'
+            - npm ci || npm install
+            # ✅ Fix Rollup native binary bug:
+            - echo "🔧 Rebuilding rollup native binary..."
+            - npm rebuild rollup --verbose
         build:
           commands:
-            - echo "🚀 build PWD:"
-            - pwd
-            - ls -la
+            - echo "🚀 Running Vite build..."
             - npm run build
       artifacts:
         baseDirectory: dist
         files:
-          - '**/*'
+          - "**/*"
       cache:
         paths:
           - node_modules/**/*
