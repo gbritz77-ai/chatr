@@ -1,28 +1,29 @@
 version: 1
-applications:
-  - appRoot: frontend
-    frontend:
-      phases:
-        preBuild:
-          commands:
-            - nvm install 20
-            - nvm use 20
-            - cd frontend
-            - npm ci
-            - npm install -g @aws-amplify/cli
-            - |
-              amplify pull --yes --env dev \
-              --amplify '{ "envName": "dev" }' \
-              --frontend '{ "frontend": "javascript", "framework": "none", "config": {} }' \
-              --providers '{ "awscloudformation": { "configLevel": "project" } }'
-        build:
-          commands:
-            - cd frontend
-            - npm run build
-      artifacts:
-        baseDirectory: dist
-        files:
-          - '**/*'
-      cache:
-        paths:
-          - frontend/node_modules/**/*
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - echo "📂 Changing directory to frontend"
+        - cd frontend
+        - nvm install 20
+        - nvm use 20
+        - npm ci
+        - npm install -g @aws-amplify/cli
+        - |
+          echo "⚙️ Pulling Amplify env: dev"
+          amplify pull --yes --env dev \
+          --amplify '{ "envName": "dev" }' \
+          --frontend '{ "frontend": "javascript", "framework": "none", "config": {} }' \
+          --providers '{ "awscloudformation": { "configLevel": "project" } }'
+    build:
+      commands:
+        - echo "🚀 Building app from /frontend"
+        - cd frontend
+        - npm run build
+  artifacts:
+    baseDirectory: frontend/dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - frontend/node_modules/**/*
