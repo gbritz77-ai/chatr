@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { getMembers, API_BASE } from "../lib/api";
 import { Avatar } from "./Avatar";
 import { LogOut, Users } from "lucide-react";
@@ -18,6 +18,9 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   const [newMember, setNewMember] = useState("");
 
   const profileName = localStorage.getItem("profileName") || currentUser;
+
+  // 🧩 Fix: useRef to preserve click timeout between renders
+  const clickTimerRef = useRef(null);
 
   /* =========================================================
      Load Members
@@ -223,20 +226,19 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   );
 
   /* =========================================================
-     Handle group click / double-click
+     ✅ Fixed handleGroupClick with stable double-click detection
   ========================================================= */
-  let clickTimeout = null;
-
   function handleGroupClick(e, g, chatKey) {
-    if (clickTimeout) {
-      clearTimeout(clickTimeout);
-      clickTimeout = null;
+    if (clickTimerRef.current) {
       // 🚀 Double-click detected
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
       setSelectedGroup(g);
       setShowManageModal(true);
     } else {
-      clickTimeout = setTimeout(() => {
-        // 🖱️ Single click (open chat)
+      // 🖱 Single-click (open chat)
+      clickTimerRef.current = setTimeout(() => {
+        clickTimerRef.current = null;
         setActiveChat(`group-${g.groupid}`);
         setUnreadMap((prev) => ({ ...prev, [chatKey]: 0 }));
         onSelectUser({
@@ -245,7 +247,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
           name: g.groupName,
         });
         setSelectedGroup(g);
-        clickTimeout = null;
       }, 250);
     }
   }
@@ -390,8 +391,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
           <p className="text-slate-400 text-sm italic">No groups yet</p>
         )}
       </div>
-
-      {/* 🧩 Create & Manage Group Modals (keep your existing modals below) */}
     </aside>
   );
 }
