@@ -1,0 +1,15 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-chatr-dev-896c3-authRole",
+      "UnauthRoleArn": "arn:aws:iam::528757805971:role/amplify-chatr-dev-896c3-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::528757805971:role/amplify-chatr-dev-896c3-authRole",
+      "Region": "eu-west-2",
+      "DeploymentBucketName": "amplify-chatr-dev-896c3-deployment",
+      "UnauthRoleName": "amplify-chatr-dev-896c3-unauthRole",
+      "StackName": "amplify-chatr-dev-896c3",
+      "StackId": "arn:aws:cloudformation:eu-west-2:528757805971:stack/amplify-chatr-dev-896c3/1468b910-af4f-11f0-a663-062077d4bcdd",
+      "AmplifyAppId": "d3rrkqgvvakfxn"
+    }
+  }
+}
