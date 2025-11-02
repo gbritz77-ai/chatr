@@ -1,7 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { getMembers, API_BASE } from "../lib/api";
 import { Avatar } from "./Avatar";
-import { LogOut, Users, Trash2, Plus, Edit3, X } from "lucide-react";
+import {
+  LogOut,
+  Users,
+  Edit3,
+  X,
+  Clock,
+  Plus,
+} from "lucide-react";
 
 export default function Sidebar({ onSelectUser, currentUser }) {
   const [members, setMembers] = useState([]);
@@ -9,40 +16,46 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   const [activeChat, setActiveChat] = useState(null);
   const [unreadMap, setUnreadMap] = useState({});
   const [search, setSearch] = useState("");
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showManageModal, setShowManageModal] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState(null);
-  const [selectedMembers, setSelectedMembers] = useState([]);
-  const [groupName, setGroupName] = useState("");
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [selectedMember, setSelectedMember] = useState(null);
+  const [schedule, setSchedule] = useState({
+    start: "09:00",
+    end: "17:00",
+    days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+  });
   const [loading, setLoading] = useState(false);
-  const [newMember, setNewMember] = useState("");
 
   const profileName = localStorage.getItem("profileName") || currentUser;
 
   /* =========================================================
-     Utility Helpers
+     🔧 Utility: Determine if member is "Active" right now
   ========================================================= */
-  const getChatKey = (type, id, otherUser) =>
-    type === "group"
-      ? `GROUP#${id}`
-      : `CHAT#${[currentUser, otherUser]
-          .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
-          .join("#")}`;
+  function isMemberActive(member) {
+    if (!member?.workSchedule) return false;
 
-  // Mark chat as read (server + UI)
-  async function markRead(chatid) {
-    if (!chatid || !currentUser) return;
-    try {
-      await fetch(`${API_BASE}/messages/mark-read`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatid, username: currentUser }),
-      });
-      setUnreadMap((prev) => ({ ...prev, [chatid]: 0 }));
-    } catch (err) {
-      console.warn("⚠️ Failed to mark chat as read:", err);
-    }
+    const { start, end, days } = member.workSchedule;
+    const now = new Date();
+    const currentDay = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
+      now.getDay()
+    ];
+
+    if (!days?.includes(currentDay)) return false;
+
+    const [startH, startM] = start.split(":").map(Number);
+    const [endH, endM] = end.split(":").map(Number);
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+    const startMins = startH * 60 + startM;
+    const endMins = endH * 60 + endM;
+
+    return currentMins >= startMins && currentMins <= endMins;
   }
+
+  // 💡 Refresh "Active" indicators every minute
+  const [timeTick, setTimeTick] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setTimeTick(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   /* =========================================================
      Load Members
@@ -58,7 +71,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
             ? JSON.parse(res.body)
             : res;
 
-        const membersData = data?.members || data?.data || data?.Items || [];
+        const membersData = data?.members || data?.Items || [];
         const filtered = membersData.filter((m) => {
           const uid = (m.userid || "").toLowerCase();
           const pname = (m.profileName || "").toLowerCase();
@@ -75,39 +88,31 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }, [currentUser]);
 
   /* =========================================================
-     Load Groups
+     🔗 Get Chat Key Helper
   ========================================================= */
-  async function loadGroups() {
-    if (!currentUser) return;
-    try {
-      const res = await fetch(
-        `${API_BASE}/groups?username=${encodeURIComponent(currentUser)}`
-      );
-      const raw = await res.json();
-      const data = typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
+  const getChatKey = (type, id, otherUser) =>
+    type === "group"
+      ? `GROUP#${id}`
+      : `CHAT#${[currentUser, otherUser]
+          .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+          .join("#")}`;
 
-      if (data?.success) {
-        const normalized = (data.groups || []).map((g) => ({
-          ...g,
-          groupName: g.groupName || g.groupname || "",
-        }));
-        setGroups(normalized);
-      } else {
-        setGroups([]);
-      }
+  async function markRead(chatid) {
+    if (!chatid || !currentUser) return;
+    try {
+      await fetch(`${API_BASE}/messages/mark-read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatid, username: currentUser }),
+      });
+      setUnreadMap((prev) => ({ ...prev, [chatid]: 0 }));
     } catch (err) {
-      console.error("❌ [Sidebar] Failed to fetch groups:", err);
+      console.warn("⚠️ Failed to mark chat as read:", err);
     }
   }
 
-  useEffect(() => {
-    loadGroups();
-    const interval = setInterval(loadGroups, 10000);
-    return () => clearInterval(interval);
-  }, [currentUser]);
-
   /* =========================================================
-     🔢 Load Unread Counts
+     🔢 Unread Counts
   ========================================================= */
   async function loadUnreadCounts() {
     if (!currentUser) return;
@@ -134,62 +139,43 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }, [currentUser]);
 
   /* =========================================================
-     Group Management (unchanged)
+     🕒 Load and Save Schedule
   ========================================================= */
-  async function handleCreateGroup() {
-    if (!groupName.trim() || selectedMembers.length === 0) {
-      alert("Please provide a group name and select at least one member.");
-      return;
-    }
-
-    setLoading(true);
+  async function fetchSchedule(userid) {
     try {
-      const payload = {
-        groupName,
-        creator: currentUser,
-        members: selectedMembers,
-      };
-
-      const res = await fetch(`${API_BASE}/groups`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error("Invalid JSON response from API");
-      }
-
-      const parsed =
-        typeof data?.body === "string" ? JSON.parse(data.body) : data;
-
-      if (parsed?.success) {
-        alert("✅ Group created!");
-        setShowCreateModal(false);
-        setGroupName("");
-        setSelectedMembers([]);
-        loadGroups();
-      } else {
-        alert("⚠️ " + (parsed?.message || "Failed to create group"));
-      }
+      const res = await fetch(`${API_BASE}/work-schedule?username=${userid}`);
+      const raw = await res.json();
+      const data = typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
+      if (data?.success && data.schedule) setSchedule(data.schedule);
     } catch (err) {
-      console.error("❌ Group creation failed:", err);
-      alert("❌ Failed to create group — check console for details.");
-    } finally {
+      console.error("❌ Failed to load schedule:", err);
+    }
+  }
+
+  async function saveSchedule() {
+    try {
+      setLoading(true);
+      await fetch(`${API_BASE}/work-schedule`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userid: selectedMember.userid,
+          workSchedule: schedule,
+        }),
+      });
+      alert("✅ Schedule saved!");
+      setShowScheduleModal(false);
       setLoading(false);
+    } catch (err) {
+      setLoading(false);
+      alert("❌ Failed to save schedule");
+      console.error(err);
     }
   }
 
   /* =========================================================
      Render
   ========================================================= */
-  const filteredGroups = groups.filter((g) =>
-    g.groupName?.toLowerCase().includes(search.toLowerCase())
-  );
   const filteredMembers = members.filter((m) =>
     m.profileName?.toLowerCase().includes(search.toLowerCase())
   );
@@ -205,7 +191,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
             className="w-40 h-auto object-contain rounded-lg shadow-sm border border-slate-200"
           />
           <p className="text-[11px] text-slate-400 mt-1">
-            <strong>Debug:</strong> {members.length} members, {groups.length} groups
+            {members.length} members online check
           </p>
         </div>
         <button
@@ -232,44 +218,79 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       </div>
 
       {/* Members */}
-      <div className="p-3 border-b">
-        <h2 className="font-semibold text-slate-600 text-sm mb-2">👤 Members</h2>
+      <div className="p-3 border-b overflow-y-auto">
+        <h2 className="font-semibold text-slate-600 text-sm mb-2">
+          👤 Members
+        </h2>
+
         {filteredMembers.length ? (
           <div className="space-y-1">
             {filteredMembers.map((m) => {
               const chatKey = getChatKey("user", null, m.userid);
               const unread = unreadMap[chatKey] || 0;
+              const active = isMemberActive(m); // 💡 check schedule
+              const scheduleText =
+                m.workSchedule &&
+                `${m.workSchedule.start}–${m.workSchedule.end} (${m.workSchedule.days.join(
+                  ", "
+                )})`;
+
               return (
-                <button
-                  key={m.userid}
-                  onClick={() => {
-                    const chatid = getChatKey("user", null, m.userid);
-                    markRead(chatid); // ✅ mark as read immediately
-                    setActiveChat(`user-${m.userid}`);
-                    onSelectUser({
-                      type: "user",
-                      id: m.userid,
-                      name: m.profileName,
-                    });
-                  }}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-md w-full text-left transition ${
-                    activeChat === `user-${m.userid}`
-                      ? "bg-gray-100 text-gray-900"
-                      : "hover:bg-gray-50"
-                  }`}
-                >
-                  <Avatar name={m.profileName} size={2.2} />
-                  <div className="flex-1 flex justify-between items-center">
-                    <span className="text-sm font-medium truncate">
-                      {m.profileName}
-                    </span>
-                    {unread > 0 && (
-                      <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">
-                        {unread}
-                      </span>
-                    )}
+                <div key={m.userid} className="flex flex-col border-b py-1">
+                  <div className="flex items-center justify-between px-3">
+                    <button
+                      onClick={() => {
+                        markRead(chatKey);
+                        setActiveChat(`user-${m.userid}`);
+                        onSelectUser({
+                          type: "user",
+                          id: m.userid,
+                          name: m.profileName,
+                        });
+                      }}
+                      className={`flex items-center gap-3 py-2 rounded-md w-full text-left transition ${
+                        activeChat === `user-${m.userid}`
+                          ? "bg-gray-100"
+                          : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <Avatar name={m.profileName} size={2.2} />
+                      <div className="flex-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium truncate">
+                            {m.profileName}
+                          </span>
+
+                          <span
+                            className={`flex items-center gap-1 text-xs ${
+                              active ? "text-green-600" : "text-red-500"
+                            }`}
+                          >
+                            ● {active ? "Active" : "Offline"}
+                          </span>
+                        </div>
+
+                        {scheduleText && (
+                          <div className="text-xs text-slate-500 mt-1">
+                            🕒 {scheduleText}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+
+                    <button
+                      className="ml-2 text-gray-500 hover:text-blue-600"
+                      onClick={() => {
+                        setSelectedMember(m);
+                        fetchSchedule(m.userid);
+                        setShowScheduleModal(true);
+                      }}
+                      title="Manage working hours"
+                    >
+                      <Clock size={16} />
+                    </button>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -278,72 +299,93 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         )}
       </div>
 
-      {/* Groups */}
-      <div className="flex-1 overflow-y-auto p-3">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-slate-600 text-sm flex items-center gap-1">
-            <Users size={14} /> Groups
-          </h2>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="text-xs bg-gray-800 text-white px-2 py-1 rounded-md hover:bg-gray-700"
-          >
-            + Create
-          </button>
-        </div>
+      {/* 🕒 Schedule Modal */}
+      {showScheduleModal && selectedMember && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-[420px] p-5 relative">
+            <button
+              onClick={() => setShowScheduleModal(false)}
+              className="absolute top-3 right-3 text-gray-500 hover:text-red-500"
+            >
+              <X size={18} />
+            </button>
 
-        {filteredGroups.length ? (
-          <div className="space-y-2">
-            {filteredGroups.map((g) => {
-              const chatKey = `GROUP#${g.groupid}`;
-              const unread = unreadMap[chatKey] || 0;
-              return (
-                <div
-                  key={g.groupid}
-                  className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-gray-50 transition"
-                >
-                  <div
-                    onClick={() => {
-                      markRead(chatKey); // ✅ mark group as read
-                      setActiveChat(`group-${g.groupid}`);
-                      onSelectUser({
-                        type: "group",
-                        id: g.groupid,
-                        name: g.groupName,
-                      });
-                      setSelectedGroup(g);
-                    }}
-                    className="flex items-center gap-3 cursor-pointer flex-1"
-                  >
-                    <Avatar name={g.groupName} size={2.5} />
-                    <div>
-                      <div className="font-medium text-sm truncate">
-                        {g.groupName}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {g.members?.length || 0} members
-                      </div>
-                    </div>
-                  </div>
+            <h3 className="text-lg font-semibold mb-3">
+              Working Hours — {selectedMember.profileName}
+            </h3>
 
-                  <button
-                    onClick={() => {
-                      setSelectedGroup(g);
-                      setShowManageModal(true);
-                    }}
-                    title="Edit group"
-                    className="ml-2 text-gray-600 hover:text-blue-600"
-                  >
-                    <Edit3 size={16} />
-                  </button>
-                </div>
-              );
-            })}
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="text-sm font-medium text-gray-700">
+                  Start Time:
+                </label>
+                <input
+                  type="time"
+                  value={schedule.start}
+                  onChange={(e) =>
+                    setSchedule({ ...schedule, start: e.target.value })
+                  }
+                  className="w-full border px-2 py-1 rounded-md text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">
+                  End Time:
+                </label>
+                <input
+                  type="time"
+                  value={schedule.end}
+                  onChange={(e) =>
+                    setSchedule({ ...schedule, end: e.target.value })
+                  }
+                  className="w-full border px-2 py-1 rounded-md text-sm"
+                />
+              </div>
+            </div>
+
+            <label className="text-sm font-medium text-gray-700">Days:</label>
+            <div className="grid grid-cols-3 gap-2 my-2">
+              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
+                <label key={day} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={schedule.days.includes(day)}
+                    onChange={(e) =>
+                      setSchedule((prev) => ({
+                        ...prev,
+                        days: e.target.checked
+                          ? [...prev.days, day]
+                          : prev.days.filter((d) => d !== day),
+                      }))
+                    }
+                  />
+                  {day}
+                </label>
+              ))}
+            </div>
+
+            <div className="flex justify-end mt-4 gap-2">
+              <button
+                onClick={() => setShowScheduleModal(false)}
+                className="bg-gray-300 text-gray-800 text-sm px-3 py-2 rounded-md hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveSchedule}
+                disabled={loading}
+                className={`${
+                  loading
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                } text-white text-sm px-3 py-2 rounded-md`}
+              >
+                Save
+              </button>
+            </div>
           </div>
-        ) : (
-          <p className="text-slate-400 text-sm italic">No groups yet</p>
-        )}
-      </div>
+        </div>
+      )}
     </aside>
   );
 }
