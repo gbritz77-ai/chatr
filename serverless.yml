@@ -142,6 +142,7 @@ functions:
   messages:
     handler: src/handlers/messages.handler
     events:
+      # Standard chat messages
       - http:
           path: messages
           method: any
@@ -150,9 +151,17 @@ functions:
           path: messages/{proxy+}
           method: any
           cors: true
+
+      # Fetch unread counts
       - http:
           path: messages/unread-counts
           method: get
+          cors: true
+
+      # Mark chat as read
+      - http:
+          path: messages/mark-read
+          method: post
           cors: true
 
   # --- 👨‍👩‍👧 Groups ---

@@ -22,7 +22,7 @@ const response = (statusCode, body) => ({
 });
 
 /* ============================================================
-   🧩 Chat ID Normalizer
+   🔑 Chat ID Normalizer
 ============================================================ */
 function getChatId(userA, userB) {
   const sorted = [userA, userB].sort((a, b) =>
@@ -55,17 +55,14 @@ exports.handler = async (event) => {
     /* ============================================================
        🔢 GET /messages/unread-counts?username=...
     ============================================================= */
-    if (
-      method === "GET" &&
-      (event.path || "").includes("unread-counts")
-    ) {
+    if (method === "GET" && (event.path || "").includes("unread-counts")) {
       const username = params.username;
       if (!username)
         return response(400, { success: false, message: "Missing username" });
 
       console.log("📊 Calculating unread counts for:", username);
 
-      // 1️⃣ Fetch all read entries for this user
+      // 1️⃣ Get last read timestamps for this user
       const readResult = await dynamodb
         .scan({
           TableName: READ_TRACKING_TABLE,
@@ -80,21 +77,25 @@ exports.handler = async (event) => {
         readMap[item.chatid] = new Date(item.lastReadAt);
       }
 
-      // 2️⃣ Get all messages addressed to this user
+      // 2️⃣ Get all messages involving this user (as recipient or in group)
       const msgResult = await dynamodb
         .scan({
           TableName: TABLE_NAME,
-          FilterExpression: "recipient = :u",
+          FilterExpression:
+            "contains(#participants, :u) OR recipient = :u OR sender = :u",
+          ExpressionAttributeNames: { "#participants": "participants" },
           ExpressionAttributeValues: { ":u": username },
         })
         .promise();
 
-      // 3️⃣ Count messages newer than last read
+      // 3️⃣ Compute unread per chatid
       const unreadMap = {};
       for (const msg of msgResult.Items || []) {
-        const chatid = msg.chatId || msg.groupid;
+        const chatid = msg.chatId || msg.groupid || null;
+        if (!chatid) continue;
         const sentAt = new Date(msg.timestamp || msg.createdAt || 0);
         const lastReadAt = readMap[chatid];
+
         if (!lastReadAt || sentAt > lastReadAt) {
           unreadMap[chatid] = (unreadMap[chatid] || 0) + 1;
         }
@@ -111,7 +112,6 @@ exports.handler = async (event) => {
       const chatIdParam = params.chatId || params.chatid;
       const groupIdParam = params.groupid;
 
-      // --- Private Chat ---
       if (chatIdParam) {
         const chatId = decodeURIComponent(chatIdParam);
         console.log("🧩 Scanning private messages for:", chatId);
@@ -128,11 +128,9 @@ exports.handler = async (event) => {
           (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
         );
 
-        console.log("✅ Private messages found:", messages.length);
         return response(200, { success: true, messages });
       }
 
-      // --- Group Chat ---
       if (groupIdParam) {
         const groupId = decodeURIComponent(groupIdParam);
         console.log("🧩 Scanning group messages for:", groupId);
@@ -149,11 +147,9 @@ exports.handler = async (event) => {
           (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
         );
 
-        console.log("✅ Group messages found:", messages.length);
         return response(200, { success: true, messages });
       }
 
-      // --- Missing Params ---
       return response(400, {
         success: false,
         message: "Missing chatId or groupid",
@@ -184,8 +180,6 @@ exports.handler = async (event) => {
         attachmentKey: attachmentKey || null,
         attachmentType: attachmentType || null,
       };
-
-      console.log("💾 Saving message:", item);
 
       await dynamodb
         .put({

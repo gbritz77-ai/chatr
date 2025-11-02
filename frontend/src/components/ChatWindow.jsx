@@ -64,36 +64,49 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }, []);
 
   /* ----------------------------------------------------
-     💬 Tab + Sound Notification for new messages
-  ---------------------------------------------------- */
-  useEffect(() => {
-    if (!activeUser || !messages.length) return;
+   💬 Tab + Sound Notification for new messages (improved)
+---------------------------------------------------- */
+useEffect(() => {
+  if (!activeUser || !messages.length) return;
 
-    const unreadCount = messages.length;
-    const grew = unreadCount > previousCount.current;
-    const lastMsg = messages[messages.length - 1];
-    previousCount.current = unreadCount;
+  const unreadCount = messages.length;
+  const grew = unreadCount > previousCount.current;
+  const lastMsg = messages[messages.length - 1];
+  previousCount.current = unreadCount;
 
-    if (grew && lastMsg?.sender !== currentUser) {
-      console.log("🔔 New message received!");
-      // Play notification sound
-      soundRef.current
-        ?.play()
-        .catch(() => console.warn("⚠️ Sound autoplay blocked until user interacts."));
-      // Optional vibration for supported devices
-      if (navigator.vibrate) navigator.vibrate(60);
-      // Change tab title
-      document.title = "💬 New message!";
-      setTimeout(() => {
-        document.title = defaultTitle.current;
-      }, 4000);
-    }
+  if (grew && lastMsg?.sender !== currentUser) {
+    console.log("🔔 New message detected — triggering notification!");
 
-    // Reset tab title when refocused
-    const handleFocus = () => (document.title = defaultTitle.current);
-    window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
-  }, [messages, activeUser, currentUser]);
+    // Play sound
+    soundRef.current
+      ?.play()
+      .catch(() => console.warn("⚠️ Autoplay blocked until user interaction."));
+
+    // Optional vibration for supported devices
+    if (navigator.vibrate) navigator.vibrate(60);
+
+    // Change tab title (even if not backgrounded)
+    document.title = "💬 New message!";
+
+    // Flash the title between two states for visibility
+    let flashing = true;
+    const flashInterval = setInterval(() => {
+      document.title = flashing ? "📨 New message!" : "💬 CHATr";
+      flashing = !flashing;
+    }, 1000);
+
+    // Stop flashing after 5 seconds or when user focuses tab
+    const stopFlash = () => {
+      clearInterval(flashInterval);
+      document.title = "CHATr";
+      window.removeEventListener("focus", stopFlash);
+    };
+
+    window.addEventListener("focus", stopFlash);
+    setTimeout(stopFlash, 5000);
+  }
+}, [messages, activeUser, currentUser]);
+
 
   /* ----------------------------------------------------
      🔗 Get Signed URL for downloads
@@ -292,6 +305,13 @@ export default function ChatWindow({ activeUser, currentUser }) {
               size={10}
               style="micah"
             />
+            <button
+              onClick={() => soundRef.current?.play()}
+              className="ml-auto text-sm px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-600 rounded-md"
+            >
+              🔈 Test Sound
+            </button>
+
             <div>
               <div>{activeUser.name || activeUser.id}</div>
               {remoteTyping && (
