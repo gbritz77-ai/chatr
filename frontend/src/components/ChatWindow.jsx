@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — with Sound + Tab Notifications (WAV version)
+   💬 ChatWindow — with Sound + Tab + Desktop Notifications
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -32,12 +32,24 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const typingTimer = useRef(null);
-  const previousCount = useRef(0);
-  const defaultTitle = useRef(document.title);
+  const previousId = useRef(null);
   const soundRef = useRef(null);
   const soundUnlocked = useRef(false);
 
   const currentProfileName = localStorage.getItem("profileName") || currentUser;
+
+  /* ----------------------------------------------------
+     🔔 Request Notification Permission (once)
+  ---------------------------------------------------- */
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "default") {
+        Notification.requestPermission().catch((err) =>
+          console.warn("Notification permission error:", err)
+        );
+      }
+    }
+  }, []);
 
   /* ----------------------------------------------------
      🔓 Unlock sound on first click (browser autoplay fix)
@@ -59,53 +71,80 @@ export default function ChatWindow({ activeUser, currentUser }) {
   ---------------------------------------------------- */
   useEffect(() => {
     soundRef.current = new Audio("/sounds/mixkit-sci-fi-confirmation-914.wav");
-    soundRef.current.volume = 0.6; // adjust loudness
+    soundRef.current.volume = 0.6;
     soundRef.current.preload = "auto";
   }, []);
 
   /* ----------------------------------------------------
-   💬 Tab + Sound Notification for new messages (improved)
+   💬 Tab + Sound + Branded Desktop Notification (using /public/logo)
 ---------------------------------------------------- */
 useEffect(() => {
   if (!activeUser || !messages.length) return;
 
-  const unreadCount = messages.length;
-  const grew = unreadCount > previousCount.current;
   const lastMsg = messages[messages.length - 1];
-  previousCount.current = unreadCount;
+  const newId = lastMsg?.messageid || lastMsg?.timestamp;
 
-  if (grew && lastMsg?.sender !== currentUser) {
-    console.log("🔔 New message detected — triggering notification!");
+  if (newId && newId !== previousId.current && lastMsg?.sender !== currentUser) {
+    previousId.current = newId;
 
-    // Play sound
+    console.log("🔔 New message detected:", lastMsg);
+
+    // --- Play sound ---
     soundRef.current
       ?.play()
       .catch(() => console.warn("⚠️ Autoplay blocked until user interaction."));
 
-    // Optional vibration for supported devices
-    if (navigator.vibrate) navigator.vibrate(60);
+    // --- Optional vibration ---
+    if (navigator.vibrate) navigator.vibrate(80);
 
-    // Change tab title (even if not backgrounded)
-    document.title = "💬 New message!";
-
-    // Flash the title between two states for visibility
+    // --- Flash tab title ---
     let flashing = true;
+    document.title = "💬 New message!";
     const flashInterval = setInterval(() => {
       document.title = flashing ? "📨 New message!" : "💬 CHATr";
       flashing = !flashing;
     }, 1000);
 
-    // Stop flashing after 5 seconds or when user focuses tab
     const stopFlash = () => {
       clearInterval(flashInterval);
       document.title = "CHATr";
       window.removeEventListener("focus", stopFlash);
     };
-
     window.addEventListener("focus", stopFlash);
-    setTimeout(stopFlash, 5000);
+    setTimeout(stopFlash, 6000);
+
+    // --- 🪄 Desktop notification (using your logo) ---
+    if ("Notification" in window && Notification.permission === "granted") {
+      const title = "💬 Chatr Message";
+      const body =
+        activeUser.type === "group"
+          ? `${lastMsg.sender} in ${activeUser.name}: ${lastMsg.text || "Sent a file 📎"}`
+          : `${lastMsg.sender}: ${lastMsg.text || "Sent a file 📎"}`;
+
+      const notif = new Notification(title, {
+        body,
+        icon: "/logo/logo.JPG", // 👈 use your logo here
+        badge: "/logo/logo.JPG", // fallback for Android/PWA
+        tag: "chatr-message",
+        silent: true,
+        vibrate: [80, 40, 80],
+        data: { url: window.location.href },
+      });
+
+      notif.onclick = (event) => {
+        event.preventDefault();
+        window.focus();
+        stopFlash();
+      };
+
+      // Auto-close popup after 6 seconds
+      setTimeout(() => notif.close(), 6000);
+    }
+  } else if (!previousId.current && lastMsg) {
+    previousId.current = newId;
   }
 }, [messages, activeUser, currentUser]);
+
 
 
   /* ----------------------------------------------------
@@ -164,7 +203,7 @@ useEffect(() => {
 
   useEffect(() => {
     if (!activeUser || !currentUser) return;
-    previousCount.current = 0;
+    previousId.current = null;
     loadMessages();
     const interval = setInterval(loadMessages, 3000);
     return () => clearInterval(interval);
@@ -296,30 +335,34 @@ useEffect(() => {
   return (
     <div className="flex flex-col flex-1 h-screen ml-[320px] bg-slate-50 relative">
       {/* Header */}
-      <div className="sticky top-0 z-10 border-b bg-white/70 backdrop-blur-lg p-4 font-semibold text-slate-700 flex items-center gap-3">
+      <div className="sticky top-0 z-10 border-b bg-white/70 backdrop-blur-lg p-4 font-semibold text-slate-700 flex items-center justify-between">
         {activeUser ? (
           <>
-            <Avatar
-              seed={activeUser.name || activeUser.id}
-              username={activeUser.name || activeUser.id}
-              size={10}
-              style="micah"
-            />
+            {/* Left side: avatar + name */}
+            <div className="flex items-center gap-3">
+              <Avatar
+                seed={activeUser.name || activeUser.id}
+                username={activeUser.name || activeUser.id}
+                size={10}
+                style="micah"
+              />
+              <div>
+                <div>{activeUser.name || activeUser.id}</div>
+                {remoteTyping && (
+                  <div className="text-xs text-slate-500 animate-pulse">
+                    typing...
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right side: Test sound */}
             <button
               onClick={() => soundRef.current?.play()}
-              className="ml-auto text-sm px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-600 rounded-md"
+              className="text-sm px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-600 rounded-md"
             >
               🔈 Test Sound
             </button>
-
-            <div>
-              <div>{activeUser.name || activeUser.id}</div>
-              {remoteTyping && (
-                <div className="text-xs text-slate-500 animate-pulse">
-                  typing...
-                </div>
-              )}
-            </div>
           </>
         ) : (
           "Welcome to CHATr"
@@ -353,7 +396,6 @@ useEffect(() => {
         )}
         <div ref={messagesEndRef} />
       </div>
-
       {/* Input Bar */}
       {activeUser && (
         <div className="sticky bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-inner px-6 py-3">
@@ -523,7 +565,9 @@ function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
             : "bg-white border text-slate-800"
         }`}
       >
-        {msg.text && <div className="whitespace-pre-wrap break-words">{msg.text}</div>}
+        {msg.text && (
+          <div className="whitespace-pre-wrap break-words">{msg.text}</div>
+        )}
 
         {viewUrl && isImage && (
           <img
