@@ -22,45 +22,58 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     end: "17:00",
     days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
   });
+  const [mySchedule, setMySchedule] = useState(null);
+  const [isSelfActive, setIsSelfActive] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const profileName = localStorage.getItem("profileName") || currentUser;
 
   /* =========================================================
-     🔧 Utility: Determine if member is "Active" right now
+     🔧 Utility: Determine if member is active right now
   ========================================================= */
   function isMemberActive(member) {
     if (!member?.workSchedule) return false;
-
     const { start, end, days } = member.workSchedule;
     const now = new Date();
     const currentDay = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
       now.getDay()
     ];
-
     if (!days?.includes(currentDay)) return false;
-
     const [startH, startM] = start.split(":").map(Number);
     const [endH, endM] = end.split(":").map(Number);
     const currentMins = now.getHours() * 60 + now.getMinutes();
     const startMins = startH * 60 + startM;
     const endMins = endH * 60 + endM;
-
     return currentMins >= startMins && currentMins <= endMins;
   }
 
-  // 💡 Refresh "Active" indicators every minute
-  const [timeTick, setTimeTick] = useState(Date.now());
+  function checkIfSelfActive(schedule) {
+    if (!schedule) return false;
+    const { start, end, days } = schedule;
+    const now = new Date();
+    const currentDay = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][now.getDay()];
+    if (!days?.includes(currentDay)) return false;
+    const [startH, startM] = start.split(":").map(Number);
+    const [endH, endM] = end.split(":").map(Number);
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+    const startMins = startH * 60 + startM;
+    const endMins = endH * 60 + endM;
+    return currentMins >= startMins && currentMins <= endMins;
+  }
+
+  // Refresh active state every minute
   useEffect(() => {
-    const timer = setInterval(() => setTimeTick(Date.now()), 60000);
+    const timer = setInterval(() => {
+      if (mySchedule) setIsSelfActive(checkIfSelfActive(mySchedule));
+    }, 60000);
     return () => clearInterval(timer);
-  }, []);
+  }, [mySchedule]);
 
   /* =========================================================
-     Load Members
+     Load Members & Groups
   ========================================================= */
   useEffect(() => {
-    async function loadMembers() {
+    async function loadMembersAndGroups() {
       try {
         const res = await getMembers();
         const data =
@@ -71,23 +84,37 @@ export default function Sidebar({ onSelectUser, currentUser }) {
             : res;
 
         const membersData = data?.members || data?.Items || [];
-        const filtered = membersData.filter((m) => {
-          const uid = (m.userid || "").toLowerCase();
-          const pname = (m.profileName || "").toLowerCase();
-          const cur = (currentUser || "").toLowerCase();
-          const prof = (profileName || "").toLowerCase();
-          return uid !== cur && pname !== prof;
-        });
-        setMembers(filtered);
+        setMembers(membersData);
+
+        // fetch groups
+        const groupRes = await fetch(`${API_BASE}/groups`);
+        const groupRaw = await groupRes.json();
+        const groupData =
+          typeof groupRaw?.body === "string"
+            ? JSON.parse(groupRaw.body)
+            : groupRaw;
+        setGroups(groupData?.groups || groupData?.Items || []);
+
+        // load my schedule
+        const me = membersData.find(
+          (m) =>
+            m.userid?.toLowerCase() === currentUser?.toLowerCase() ||
+            m.profileName?.toLowerCase() === profileName?.toLowerCase()
+        );
+        if (me) {
+          const scheduleData = await fetchSchedule(me.userid);
+          setMySchedule(scheduleData);
+          setIsSelfActive(checkIfSelfActive(scheduleData));
+        }
       } catch (err) {
-        console.error("❌ Failed to fetch members:", err);
+        console.error("❌ Failed to fetch members or groups:", err);
       }
     }
-    loadMembers();
+    loadMembersAndGroups();
   }, [currentUser]);
 
   /* =========================================================
-     🔗 Get Chat Key Helper
+     🔗 Chat ID Helper
   ========================================================= */
   const getChatKey = (type, id, otherUser) =>
     type === "group"
@@ -95,20 +122,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       : `CHAT#${[currentUser, otherUser]
           .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
           .join("#")}`;
-
-  async function markRead(chatid) {
-    if (!chatid || !currentUser) return;
-    try {
-      await fetch(`${API_BASE}/messages/mark-read`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatid, username: currentUser }),
-      });
-      setUnreadMap((prev) => ({ ...prev, [chatid]: 0 }));
-    } catch (err) {
-      console.warn("⚠️ Failed to mark chat as read:", err);
-    }
-  }
 
   /* =========================================================
      🔢 Unread Counts
@@ -138,23 +151,54 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }, [currentUser]);
 
   /* =========================================================
-     🕒 Load and Save Schedule
+     🕒 Schedule Management
   ========================================================= */
   async function fetchSchedule(userid) {
     try {
       const res = await fetch(`${API_BASE}/work-schedule?username=${userid}`);
       const raw = await res.json();
       const data = typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
-      if (data?.success && data.schedule) setSchedule(data.schedule);
+
+      let resultSchedule;
+      if (data?.success && data.schedule) {
+        resultSchedule = {
+          start: data.schedule.start || "09:00",
+          end: data.schedule.end || "17:00",
+          days:
+            Array.isArray(data.schedule.days) && data.schedule.days.length > 0
+              ? data.schedule.days
+              : ["Mon", "Tue", "Wed", "Thu", "Fri"],
+        };
+      } else {
+        resultSchedule = {
+          start: "09:00",
+          end: "17:00",
+          days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+        };
+      }
+
+      setSchedule(resultSchedule);
+      return resultSchedule;
     } catch (err) {
       console.error("❌ Failed to load schedule:", err);
+      const fallback = {
+        start: "09:00",
+        end: "17:00",
+        days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+      };
+      setSchedule(fallback);
+      return fallback;
     }
   }
 
   async function saveSchedule() {
+    if (!selectedMember?.userid) {
+      alert("⚠️ Missing user ID for schedule save.");
+      return;
+    }
     try {
       setLoading(true);
-      await fetch(`${API_BASE}/work-schedule`, {
+      const res = await fetch(`${API_BASE}/work-schedule`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -162,23 +206,39 @@ export default function Sidebar({ onSelectUser, currentUser }) {
           workSchedule: schedule,
         }),
       });
-      alert("✅ Schedule saved!");
+      const result = await res.json();
+      const data = typeof result?.body === "string" ? JSON.parse(result.body) : result;
+
+      if (data?.success) {
+        alert("✅ Schedule saved successfully!");
+        setMySchedule(schedule);
+        setIsSelfActive(checkIfSelfActive(schedule));
+      } else {
+        alert("⚠️ Saved, but no confirmation from API.");
+      }
       setShowScheduleModal(false);
-      setLoading(false);
     } catch (err) {
-      setLoading(false);
       alert("❌ Failed to save schedule");
       console.error(err);
+    } finally {
+      setLoading(false);
     }
   }
 
   /* =========================================================
-     Render
+     🧭 Filter Members
   ========================================================= */
-  const filteredMembers = members.filter((m) =>
-    m.profileName?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredMembers = members.filter((m) => {
+    const pname = (m.profileName || "").toLowerCase();
+    const prof = (profileName || "").toLowerCase();
+    const cur = (currentUser || "").toLowerCase();
+    const isSelf = pname === prof || (m.userid || "").toLowerCase() === cur;
+    return !isSelf && pname.includes(search.toLowerCase());
+  });
 
+  /* =========================================================
+     🧱 Render
+  ========================================================= */
   return (
     <aside className="fixed top-0 left-0 bottom-0 w-[320px] bg-white border-r border-slate-200 flex flex-col z-20">
       {/* Header */}
@@ -190,7 +250,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
             className="w-40 h-auto object-contain rounded-lg shadow-sm border border-slate-200"
           />
           <p className="text-[11px] text-slate-400 mt-1">
-            {members.length} members online check
+            {members.length} members total
           </p>
         </div>
         <button
@@ -216,75 +276,99 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         />
       </div>
 
+      {/* Groups */}
+      <div className="p-3 border-b overflow-y-auto">
+        <h2 className="font-semibold text-slate-600 text-sm mb-2 flex items-center gap-2">
+          <Users size={14} /> Groups
+        </h2>
+        {groups.length ? (
+          groups.map((g) => {
+            const chatKey = getChatKey("group", g.groupid);
+            const unread = unreadMap[chatKey] || 0;
+            return (
+              <button
+                key={g.groupid}
+                onClick={() => {
+                  markRead(chatKey);
+                  setActiveChat(`group-${g.groupid}`);
+                  onSelectUser({
+                    type: "group",
+                    id: g.groupid,
+                    name: g.groupname,
+                  });
+                }}
+                className={`flex items-center justify-between w-full py-2 px-3 rounded-md text-sm transition ${
+                  activeChat === `group-${g.groupid}`
+                    ? "bg-gray-100"
+                    : "hover:bg-gray-50"
+                }`}
+              >
+                <span>{g.groupname}</span>
+                {unread > 0 && (
+                  <span className="bg-blue-500 text-white text-xs font-semibold rounded-full px-2 py-0.5">
+                    {unread}
+                  </span>
+                )}
+              </button>
+            );
+          })
+        ) : (
+          <p className="text-slate-400 text-xs italic">No groups yet</p>
+        )}
+      </div>
+
       {/* Members */}
       <div className="p-3 border-b overflow-y-auto flex-1">
-        <h2 className="font-semibold text-slate-600 text-sm mb-2">
-          👤 Members
-        </h2>
-
+        <h2 className="font-semibold text-slate-600 text-sm mb-2">👤 Members</h2>
         {filteredMembers.length ? (
-          <div className="space-y-1">
-            {filteredMembers.map((m) => {
-              const chatKey = getChatKey("user", null, m.userid);
-              const unread = unreadMap[chatKey] || 0;
-              const active = isMemberActive(m);
-              const scheduleText =
-                m.workSchedule &&
-                `${m.workSchedule.start}–${m.workSchedule.end} (${m.workSchedule.days.join(
-                  ", "
-                )})`;
-
-              return (
-                <div key={m.userid} className="flex flex-col border-b py-1">
-                  <div className="flex items-center justify-between px-3">
-                    <button
-                      onClick={() => {
-                        markRead(chatKey);
-                        setActiveChat(`user-${m.userid}`);
-                        onSelectUser({
-                          type: "user",
-                          id: m.userid,
-                          name: m.profileName,
-                        });
-                      }}
-                      className={`flex items-center gap-3 py-2 rounded-md w-full text-left transition ${
-                        activeChat === `user-${m.userid}`
-                          ? "bg-gray-100"
-                          : "hover:bg-gray-50"
-                      }`}
-                    >
-                      <Avatar name={m.profileName} size={2.2} />
-                      <div className="flex-1">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium truncate">
-                            {m.profileName}
-                          </span>
-                          <span
-                            className={`flex items-center gap-1 text-xs ${
-                              active ? "text-green-600" : "text-red-500"
-                            }`}
-                          >
-                            ● {active ? "Active" : "Offline"}
-                          </span>
-                        </div>
-                        {scheduleText && (
-                          <div className="text-xs text-slate-500 mt-1">
-                            🕒 {scheduleText}
-                          </div>
-                        )}
-                      </div>
-                    </button>
+          filteredMembers.map((m) => {
+            const chatKey = getChatKey("user", null, m.userid);
+            const unread = unreadMap[chatKey] || 0;
+            const active = isMemberActive(m);
+            return (
+              <div key={m.userid} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50 rounded-md transition">
+                <button
+                  onClick={() => {
+                    markRead(chatKey);
+                    setActiveChat(`user-${m.userid}`);
+                    onSelectUser({
+                      type: "user",
+                      id: m.userid,
+                      name: m.profileName,
+                    });
+                  }}
+                  className="flex items-center gap-3 flex-1 text-left"
+                >
+                  <Avatar name={m.profileName} size={2.2} />
+                  <div className="flex-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium truncate">
+                        {m.profileName}
+                      </span>
+                      <span
+                        className={`text-xs ${
+                          active ? "text-green-600" : "text-red-500"
+                        }`}
+                      >
+                        ● {active ? "Active" : "Offline"}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                </button>
+                {unread > 0 && (
+                  <span className="bg-blue-500 text-white text-xs font-semibold rounded-full px-2 py-0.5 ml-2">
+                    {unread}
+                  </span>
+                )}
+              </div>
+            );
+          })
         ) : (
           <p className="text-slate-400 text-sm italic">No members found</p>
         )}
       </div>
 
-      {/* 👤 Logged-in user footer */}
+      {/* Footer - Logged in user */}
       <div className="border-t border-slate-200 p-3 bg-gray-50">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -293,7 +377,14 @@ export default function Sidebar({ onSelectUser, currentUser }) {
               <div className="text-sm font-semibold text-gray-800">
                 {profileName}
               </div>
-              <div className="text-xs text-gray-500">Logged in</div>
+              <div className="flex items-center gap-1 text-xs">
+                <span
+                  className={`inline-block w-2 h-2 rounded-full ${
+                    isSelfActive ? "bg-green-500" : "bg-red-500"
+                  }`}
+                ></span>
+                {isSelfActive ? "Active Now" : "Offline"}
+              </div>
             </div>
           </div>
           <button
@@ -329,11 +420,9 @@ export default function Sidebar({ onSelectUser, currentUser }) {
             >
               <X size={18} />
             </button>
-
             <h3 className="text-lg font-semibold mb-3">
               Working Hours — {selectedMember.profileName}
             </h3>
-
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="text-sm font-medium text-gray-700">
@@ -362,7 +451,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                 />
               </div>
             </div>
-
             <label className="text-sm font-medium text-gray-700">Days:</label>
             <div className="grid grid-cols-3 gap-2 my-2">
               {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
@@ -383,7 +471,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                 </label>
               ))}
             </div>
-
             <div className="flex justify-end mt-4 gap-2">
               <button
                 onClick={() => setShowScheduleModal(false)}
