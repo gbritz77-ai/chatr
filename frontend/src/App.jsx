@@ -19,41 +19,57 @@ function ProtectedRoute({ children }) {
 export default function App() {
   const lastUnread = useRef(0);
   const soundRef = useRef(null);
+  const initialCheckDone = useRef(false);
 
   useEffect(() => {
-    const currentUser = localStorage.getItem("username") || localStorage.getItem("profileName");
+    const currentUser =
+      localStorage.getItem("username") || localStorage.getItem("profileName");
     if (!currentUser) return;
 
-    // Preload sound
+    // 🎵 Preload sound
     soundRef.current = new Audio("/sounds/mixkit-sci-fi-confirmation-914.wav");
     soundRef.current.volume = 0.6;
 
-    // Ask for browser notification permission
+    // 🪄 Ask for browser notification permission
     if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission().then((perm) =>
         console.log("🔧 Notification permission:", perm)
       );
     }
 
-    async function checkUnread() {
+    /* ======================================================
+       🔁 Check Unread Counts (includes initial trigger)
+    ====================================================== */
+    async function checkUnread(initial = false) {
       try {
         const res = await fetch(
-          `${API_BASE}/messages/unread-counts?username=${encodeURIComponent(currentUser)}`
+          `${API_BASE}/messages/unread-counts?username=${encodeURIComponent(
+            currentUser
+          )}`
         );
         const raw = await res.json();
         const data = typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
 
         if (data?.success && typeof data.unreadMap === "object") {
-          const totalUnread = Object.values(data.unreadMap).reduce((a, b) => a + b, 0);
+          const totalUnread = Object.values(data.unreadMap).reduce(
+            (a, b) => a + b,
+            0
+          );
 
-          // 🔔 Trigger notification if unread count increased
-          if (totalUnread > lastUnread.current) {
+          // ✅ First load: play sound if there are any unread messages
+          if (!initialCheckDone.current && totalUnread > 0) {
+            console.log("🔔 Initial unread messages detected!");
+            soundRef.current?.play().catch(() => {});
+            initialCheckDone.current = true;
+          }
+
+          // 🔔 Trigger when unread count increases later
+          if (initialCheckDone.current && totalUnread > lastUnread.current) {
             console.log("🔔 New global message detected!");
 
-            // Play sound
             soundRef.current?.play().catch(() => {});
 
-            // Desktop notification
+            // 🪄 Desktop notification
             if ("Notification" in window && Notification.permission === "granted") {
               const notif = new Notification("💬 GeeBee’z CHATr", {
                 body: "You have new messages waiting",
@@ -69,7 +85,7 @@ export default function App() {
               };
             }
 
-            // Flash tab title if hidden
+            // 💡 Flash tab title if backgrounded
             if (document.hidden) {
               let flashing = true;
               const interval = setInterval(() => {
@@ -87,18 +103,22 @@ export default function App() {
           }
 
           lastUnread.current = totalUnread;
+          if (!initialCheckDone.current) initialCheckDone.current = true;
         }
       } catch (err) {
         console.error("❌ Failed to check unread messages:", err);
       }
     }
 
-    // Start polling every 6 seconds
-    checkUnread();
-    const interval = setInterval(checkUnread, 6000);
+    // 🚀 Run initial check + polling every 6 seconds
+    checkUnread(true);
+    const interval = setInterval(() => checkUnread(false), 6000);
     return () => clearInterval(interval);
   }, []);
 
+  /* ======================================================
+     🧭 App Routing
+  ====================================================== */
   return (
     <BrowserRouter>
       <Routes>
