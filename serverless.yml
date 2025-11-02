@@ -232,3 +232,20 @@ functions:
           path: typing
           method: get
           cors: true
+
+  # --- 🕒 Work Schedule Management ---
+  workSchedule:
+    handler: src/handlers/workSchedule.handler
+    package:
+      patterns:
+        - src/handlers/workSchedule.js
+        - node_modules/aws-sdk/**
+    events:
+      - http:
+          path: work-schedule
+          method: get
+          cors: true
+      - http:
+          path: work-schedule
+          method: put
+          cors: true
