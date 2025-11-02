@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — with Sound + Tab + Desktop Notifications
+   💬 ChatWindow — clean (no sound/notification logic)
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -32,139 +32,8 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const typingTimer = useRef(null);
-  const previousId = useRef(null);
-  const soundRef = useRef(null);
-  const soundUnlocked = useRef(false);
 
   const currentProfileName = localStorage.getItem("profileName") || currentUser;
-
-  /* ----------------------------------------------------
-     🔔 Request Notification Permission (once)
-  ---------------------------------------------------- */
-  useEffect(() => {
-    if (typeof window !== "undefined" && "Notification" in window) {
-      if (Notification.permission === "default") {
-        Notification.requestPermission().catch((err) =>
-          console.warn("Notification permission error:", err)
-        );
-      }
-    }
-  }, []);
-
-  /* ----------------------------------------------------
-     🔓 Unlock sound on first click (browser autoplay fix)
-  ---------------------------------------------------- */
-  useEffect(() => {
-    const unlock = () => {
-      if (soundUnlocked.current) return;
-      const silent = new Audio("/sounds/mixkit-sci-fi-confirmation-914.wav");
-      silent.volume = 0;
-      silent.play().catch(() => {});
-      soundUnlocked.current = true;
-    };
-    window.addEventListener("click", unlock, { once: true });
-    return () => window.removeEventListener("click", unlock);
-  }, []);
-
-  /* ----------------------------------------------------
-     🔊 Preload WAV sound
-  ---------------------------------------------------- */
-  useEffect(() => {
-    soundRef.current = new Audio("/sounds/mixkit-sci-fi-confirmation-914.wav");
-    soundRef.current.volume = 0.6;
-    soundRef.current.preload = "auto";
-  }, []);
-
-  /* ----------------------------------------------------
-   💬 Reliable Background Notification System (final)
----------------------------------------------------- */
-useEffect(() => {
-  if (!activeUser || !messages.length) return;
-
-  const lastMsg = messages[messages.length - 1];
-  const newId = lastMsg?.messageid || lastMsg?.timestamp;
-
-  // Track previously seen message ID
-  const prevId = previousId.current;
-
-  // Trigger only if it's new and not sent by current user
-  if (newId && newId !== prevId && lastMsg?.sender !== currentUser) {
-    previousId.current = newId;
-
-    console.log("🔔 New message detected:", lastMsg);
-
-    // --- Play notification sound immediately ---
-    if (soundRef.current) {
-      const playPromise = soundRef.current.play();
-      if (playPromise) playPromise.catch(() => {});
-    }
-
-    // --- Flash tab title even if backgrounded ---
-    if (document.hidden) {
-      let flashing = true;
-      const flashInterval = setInterval(() => {
-        document.title = flashing ? "💬 New message!" : "CHATr";
-        flashing = !flashing;
-      }, 1200);
-
-      const stopFlash = () => {
-        clearInterval(flashInterval);
-        document.title = "CHATr";
-        window.removeEventListener("focus", stopFlash);
-      };
-      window.addEventListener("focus", stopFlash);
-      setTimeout(stopFlash, 7000);
-    }
-
-    // --- Optional light vibration on mobile ---
-    if (navigator.vibrate) navigator.vibrate(80);
-
-    // --- 🪄 Desktop notification ---
-    if ("Notification" in window && Notification.permission === "granted") {
-      const title = "💬 GeeBee’z CHATr";
-      const body =
-        activeUser.type === "group"
-          ? `${lastMsg.sender} in ${activeUser.name}: ${lastMsg.text || "Sent a file 📎"}`
-          : `${lastMsg.sender}: ${lastMsg.text || "Sent a file 📎"}`;
-
-      const notif = new Notification(title, {
-        body,
-        icon: "/logo/logo.JPG",
-        badge: "/logo/logo.JPG",
-        tag: "chatr-message",
-        silent: true,
-        data: { url: window.location.href },
-      });
-
-      notif.onclick = (event) => {
-        event.preventDefault();
-        window.focus();
-        document.title = "CHATr";
-      };
-
-      // Close after 7s to avoid clutter
-      setTimeout(() => notif.close(), 7000);
-    }
-  } else if (!prevId && lastMsg) {
-    // Initialize tracking
-    previousId.current = newId;
-  }
-}, [messages, activeUser, currentUser]);
-
-/* ----------------------------------------------------
-   ⚙️ Ask for Notification Permission Automatically
----------------------------------------------------- */
-useEffect(() => {
-  if ("Notification" in window && Notification.permission === "default") {
-    Notification.requestPermission().then((perm) => {
-      console.log("🔧 Notification permission:", perm);
-    });
-  }
-}, []);
-
-
-
-
 
   /* ----------------------------------------------------
      🔗 Get Signed URL for downloads
@@ -222,7 +91,6 @@ useEffect(() => {
 
   useEffect(() => {
     if (!activeUser || !currentUser) return;
-    previousId.current = null;
     loadMessages();
     const interval = setInterval(loadMessages, 3000);
     return () => clearInterval(interval);
@@ -356,33 +224,22 @@ useEffect(() => {
       {/* Header */}
       <div className="sticky top-0 z-10 border-b bg-white/70 backdrop-blur-lg p-4 font-semibold text-slate-700 flex items-center justify-between">
         {activeUser ? (
-          <>
-            {/* Left side: avatar + name */}
-            <div className="flex items-center gap-3">
-              <Avatar
-                seed={activeUser.name || activeUser.id}
-                username={activeUser.name || activeUser.id}
-                size={10}
-                style="micah"
-              />
-              <div>
-                <div>{activeUser.name || activeUser.id}</div>
-                {remoteTyping && (
-                  <div className="text-xs text-slate-500 animate-pulse">
-                    typing...
-                  </div>
-                )}
-              </div>
+          <div className="flex items-center gap-3">
+            <Avatar
+              seed={activeUser.name || activeUser.id}
+              username={activeUser.name || activeUser.id}
+              size={10}
+              style="micah"
+            />
+            <div>
+              <div>{activeUser.name || activeUser.id}</div>
+              {remoteTyping && (
+                <div className="text-xs text-slate-500 animate-pulse">
+                  typing...
+                </div>
+              )}
             </div>
-
-            {/* Right side: Test sound */}
-            <button
-              onClick={() => soundRef.current?.play()}
-              className="text-sm px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-600 rounded-md"
-            >
-              🔈 Test Sound
-            </button>
-          </>
+          </div>
         ) : (
           "Welcome to CHATr"
         )}
@@ -415,6 +272,7 @@ useEffect(() => {
         )}
         <div ref={messagesEndRef} />
       </div>
+
       {/* Input Bar */}
       {activeUser && (
         <div className="sticky bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-inner px-6 py-3">
