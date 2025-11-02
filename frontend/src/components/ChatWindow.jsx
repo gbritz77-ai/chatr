@@ -76,7 +76,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }, []);
 
   /* ----------------------------------------------------
-   💬 Tab + Sound + Branded Desktop Notification (using /public/logo)
+   💬 Reliable Background Notification System (final)
 ---------------------------------------------------- */
 useEffect(() => {
   if (!activeUser || !messages.length) return;
@@ -84,38 +84,44 @@ useEffect(() => {
   const lastMsg = messages[messages.length - 1];
   const newId = lastMsg?.messageid || lastMsg?.timestamp;
 
-  if (newId && newId !== previousId.current && lastMsg?.sender !== currentUser) {
+  // Track previously seen message ID
+  const prevId = previousId.current;
+
+  // Trigger only if it's new and not sent by current user
+  if (newId && newId !== prevId && lastMsg?.sender !== currentUser) {
     previousId.current = newId;
 
     console.log("🔔 New message detected:", lastMsg);
 
-    // --- Play sound ---
-    soundRef.current
-      ?.play()
-      .catch(() => console.warn("⚠️ Autoplay blocked until user interaction."));
+    // --- Play notification sound immediately ---
+    if (soundRef.current) {
+      const playPromise = soundRef.current.play();
+      if (playPromise) playPromise.catch(() => {});
+    }
 
-    // --- Optional vibration ---
+    // --- Flash tab title even if backgrounded ---
+    if (document.hidden) {
+      let flashing = true;
+      const flashInterval = setInterval(() => {
+        document.title = flashing ? "💬 New message!" : "CHATr";
+        flashing = !flashing;
+      }, 1200);
+
+      const stopFlash = () => {
+        clearInterval(flashInterval);
+        document.title = "CHATr";
+        window.removeEventListener("focus", stopFlash);
+      };
+      window.addEventListener("focus", stopFlash);
+      setTimeout(stopFlash, 7000);
+    }
+
+    // --- Optional light vibration on mobile ---
     if (navigator.vibrate) navigator.vibrate(80);
 
-    // --- Flash tab title ---
-    let flashing = true;
-    document.title = "💬 New message!";
-    const flashInterval = setInterval(() => {
-      document.title = flashing ? "📨 New message!" : "💬 CHATr";
-      flashing = !flashing;
-    }, 1000);
-
-    const stopFlash = () => {
-      clearInterval(flashInterval);
-      document.title = "CHATr";
-      window.removeEventListener("focus", stopFlash);
-    };
-    window.addEventListener("focus", stopFlash);
-    setTimeout(stopFlash, 6000);
-
-    // --- 🪄 Desktop notification (using your logo) ---
+    // --- 🪄 Desktop notification ---
     if ("Notification" in window && Notification.permission === "granted") {
-      const title = "💬 Chatr Message";
+      const title = "💬 GeeBee’z CHATr";
       const body =
         activeUser.type === "group"
           ? `${lastMsg.sender} in ${activeUser.name}: ${lastMsg.text || "Sent a file 📎"}`
@@ -123,27 +129,40 @@ useEffect(() => {
 
       const notif = new Notification(title, {
         body,
-        icon: "/logo/logo.JPG", // 👈 use your logo here
-        badge: "/logo/logo.JPG", // fallback for Android/PWA
+        icon: "/logo/logo.JPG",
+        badge: "/logo/logo.JPG",
         tag: "chatr-message",
         silent: true,
-        vibrate: [80, 40, 80],
         data: { url: window.location.href },
       });
 
       notif.onclick = (event) => {
         event.preventDefault();
         window.focus();
-        stopFlash();
+        document.title = "CHATr";
       };
 
-      // Auto-close popup after 6 seconds
-      setTimeout(() => notif.close(), 6000);
+      // Close after 7s to avoid clutter
+      setTimeout(() => notif.close(), 7000);
     }
-  } else if (!previousId.current && lastMsg) {
+  } else if (!prevId && lastMsg) {
+    // Initialize tracking
     previousId.current = newId;
   }
 }, [messages, activeUser, currentUser]);
+
+/* ----------------------------------------------------
+   ⚙️ Ask for Notification Permission Automatically
+---------------------------------------------------- */
+useEffect(() => {
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission().then((perm) => {
+      console.log("🔧 Notification permission:", perm);
+    });
+  }
+}, []);
+
+
 
 
 
