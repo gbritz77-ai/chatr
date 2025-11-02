@@ -278,6 +278,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                       </div>
                     </button>
 
+                    {m.userid === currentUser && (
                     <button
                       className="ml-2 text-gray-500 hover:text-blue-600"
                       onClick={() => {
@@ -285,10 +286,12 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                         fetchSchedule(m.userid);
                         setShowScheduleModal(true);
                       }}
-                      title="Manage working hours"
+                      title="Manage your working hours"
                     >
                       <Clock size={16} />
                     </button>
+                  )}
+
                   </div>
                 </div>
               );
