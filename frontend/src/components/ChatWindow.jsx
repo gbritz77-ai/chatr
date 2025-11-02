@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — Full Version (with Tab Notifications)
+   💬 ChatWindow — with Sound + Tab Notifications (WAV version)
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -34,28 +34,69 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const typingTimer = useRef(null);
   const previousCount = useRef(0);
   const defaultTitle = useRef(document.title);
+  const soundRef = useRef(null);
+  const soundUnlocked = useRef(false);
 
   const currentProfileName = localStorage.getItem("profileName") || currentUser;
 
   /* ----------------------------------------------------
-     🪄 Tab Notification for New Messages
+     🔓 Unlock sound on first click (browser autoplay fix)
   ---------------------------------------------------- */
   useEffect(() => {
-    const unreadCount = messages.length;
-    if (unreadCount > previousCount.current && document.hidden) {
-      document.title = "💬 New message!";
-    }
-    previousCount.current = unreadCount;
-
-    const handleFocus = () => {
-      document.title = defaultTitle.current;
+    const unlock = () => {
+      if (soundUnlocked.current) return;
+      const silent = new Audio("/sounds/mixkit-sci-fi-confirmation-914.wav");
+      silent.volume = 0;
+      silent.play().catch(() => {});
+      soundUnlocked.current = true;
     };
-    window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
-  }, [messages]);
+    window.addEventListener("click", unlock, { once: true });
+    return () => window.removeEventListener("click", unlock);
+  }, []);
 
   /* ----------------------------------------------------
-     🔗 Helper: Get Signed URL for downloads
+     🔊 Preload WAV sound
+  ---------------------------------------------------- */
+  useEffect(() => {
+    soundRef.current = new Audio("/sounds/mixkit-sci-fi-confirmation-914.wav");
+    soundRef.current.volume = 0.6; // adjust loudness
+    soundRef.current.preload = "auto";
+  }, []);
+
+  /* ----------------------------------------------------
+     💬 Tab + Sound Notification for new messages
+  ---------------------------------------------------- */
+  useEffect(() => {
+    if (!activeUser || !messages.length) return;
+
+    const unreadCount = messages.length;
+    const grew = unreadCount > previousCount.current;
+    const lastMsg = messages[messages.length - 1];
+    previousCount.current = unreadCount;
+
+    if (grew && lastMsg?.sender !== currentUser) {
+      console.log("🔔 New message received!");
+      // Play notification sound
+      soundRef.current
+        ?.play()
+        .catch(() => console.warn("⚠️ Sound autoplay blocked until user interacts."));
+      // Optional vibration for supported devices
+      if (navigator.vibrate) navigator.vibrate(60);
+      // Change tab title
+      document.title = "💬 New message!";
+      setTimeout(() => {
+        document.title = defaultTitle.current;
+      }, 4000);
+    }
+
+    // Reset tab title when refocused
+    const handleFocus = () => (document.title = defaultTitle.current);
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [messages, activeUser, currentUser]);
+
+  /* ----------------------------------------------------
+     🔗 Get Signed URL for downloads
   ---------------------------------------------------- */
   async function getSignedUrl(fileKey) {
     try {
@@ -73,7 +114,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
-     🧩 Helper: Normalized Chat ID
+     🧩 Normalize Chat ID
   ---------------------------------------------------- */
   function getChatId(userA, userB) {
     const sorted = [userA, userB].sort((a, b) =>
@@ -110,6 +151,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
 
   useEffect(() => {
     if (!activeUser || !currentUser) return;
+    previousCount.current = 0;
     loadMessages();
     const interval = setInterval(loadMessages, 3000);
     return () => clearInterval(interval);
@@ -178,7 +220,6 @@ export default function ChatWindow({ activeUser, currentUser }) {
       let viewUrl = null;
 
       if (attachment) {
-        // Request presigned upload URL
         const presign = await fetch(
           `${import.meta.env.VITE_API_BASE}/presign-upload`,
           {
@@ -190,7 +231,6 @@ export default function ChatWindow({ activeUser, currentUser }) {
         const data = await presign.json();
         if (!data?.uploadURL) throw new Error("Presign URL generation failed");
 
-        // Upload file to S3
         const uploadResp = await fetch(data.uploadURL, {
           method: "PUT",
           headers: { "Content-Type": attachment.type },
