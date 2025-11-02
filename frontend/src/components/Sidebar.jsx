@@ -4,7 +4,6 @@ import { Avatar } from "./Avatar";
 import {
   LogOut,
   Users,
-  Edit3,
   X,
   Clock,
   Plus,
@@ -218,7 +217,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       </div>
 
       {/* Members */}
-      <div className="p-3 border-b overflow-y-auto">
+      <div className="p-3 border-b overflow-y-auto flex-1">
         <h2 className="font-semibold text-slate-600 text-sm mb-2">
           👤 Members
         </h2>
@@ -228,7 +227,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
             {filteredMembers.map((m) => {
               const chatKey = getChatKey("user", null, m.userid);
               const unread = unreadMap[chatKey] || 0;
-              const active = isMemberActive(m); // 💡 check schedule
+              const active = isMemberActive(m);
               const scheduleText =
                 m.workSchedule &&
                 `${m.workSchedule.start}–${m.workSchedule.end} (${m.workSchedule.days.join(
@@ -260,7 +259,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                           <span className="text-sm font-medium truncate">
                             {m.profileName}
                           </span>
-
                           <span
                             className={`flex items-center gap-1 text-xs ${
                               active ? "text-green-600" : "text-red-500"
@@ -269,7 +267,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                             ● {active ? "Active" : "Offline"}
                           </span>
                         </div>
-
                         {scheduleText && (
                           <div className="text-xs text-slate-500 mt-1">
                             🕒 {scheduleText}
@@ -277,21 +274,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                         )}
                       </div>
                     </button>
-
-                    {m.userid === currentUser && (
-                    <button
-                      className="ml-2 text-gray-500 hover:text-blue-600"
-                      onClick={() => {
-                        setSelectedMember(m);
-                        fetchSchedule(m.userid);
-                        setShowScheduleModal(true);
-                      }}
-                      title="Manage your working hours"
-                    >
-                      <Clock size={16} />
-                    </button>
-                  )}
-
                   </div>
                 </div>
               );
@@ -300,6 +282,41 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         ) : (
           <p className="text-slate-400 text-sm italic">No members found</p>
         )}
+      </div>
+
+      {/* 👤 Logged-in user footer */}
+      <div className="border-t border-slate-200 p-3 bg-gray-50">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Avatar name={profileName} size={2.4} />
+            <div>
+              <div className="text-sm font-semibold text-gray-800">
+                {profileName}
+              </div>
+              <div className="text-xs text-gray-500">Logged in</div>
+            </div>
+          </div>
+          <button
+            className="text-gray-600 hover:text-blue-600 transition"
+            title="Manage your working hours"
+            onClick={() => {
+              const me = members.find(
+                (m) =>
+                  m.userid?.toLowerCase() === currentUser?.toLowerCase() ||
+                  m.profileName?.toLowerCase() === profileName?.toLowerCase()
+              );
+              if (me) {
+                setSelectedMember(me);
+                fetchSchedule(me.userid);
+                setShowScheduleModal(true);
+              } else {
+                alert("⚠️ Could not find your member record.");
+              }
+            }}
+          >
+            <Clock size={18} />
+          </button>
+        </div>
       </div>
 
       {/* 🕒 Schedule Modal */}
