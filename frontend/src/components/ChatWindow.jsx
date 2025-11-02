@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — Full Version (Images, GIFs, Files, Emojis)
+   💬 ChatWindow — Full Version (with Tab Notifications)
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -32,8 +32,27 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const typingTimer = useRef(null);
+  const previousCount = useRef(0);
+  const defaultTitle = useRef(document.title);
 
   const currentProfileName = localStorage.getItem("profileName") || currentUser;
+
+  /* ----------------------------------------------------
+     🪄 Tab Notification for New Messages
+  ---------------------------------------------------- */
+  useEffect(() => {
+    const unreadCount = messages.length;
+    if (unreadCount > previousCount.current && document.hidden) {
+      document.title = "💬 New message!";
+    }
+    previousCount.current = unreadCount;
+
+    const handleFocus = () => {
+      document.title = defaultTitle.current;
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [messages]);
 
   /* ----------------------------------------------------
      🔗 Helper: Get Signed URL for downloads
@@ -396,7 +415,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
 }
 
 /* ============================================================
-   💬 MessageBubble Component (show sender name on top)
+   💬 MessageBubble Component
 ============================================================ */
 function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
   const [viewUrl, setViewUrl] = useState(msg.attachmentUrl || null);
@@ -429,7 +448,6 @@ function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
     <div
       className={`flex flex-col gap-1 ${isMine ? "items-end" : "items-start"}`}
     >
-      {/* 🧍 Sender Name */}
       <div
         className={`text-xs font-semibold mb-1 ${
           isMine ? "text-blue-500" : "text-slate-500"
@@ -438,7 +456,6 @@ function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
         {senderName}
       </div>
 
-      {/* 💬 Message Bubble */}
       <div
         className={`p-3 rounded-lg max-w-[70%] ${
           isMine
