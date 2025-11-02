@@ -112,81 +112,52 @@ export default function Sidebar({ onSelectUser, currentUser }) {
      Group Management
   ========================================================= */
   async function handleCreateGroup() {
-  if (!groupName.trim() || selectedMembers.length === 0) {
-    console.warn("⚠️ Missing required fields:", {
-      groupName,
-      selectedMembers,
-    });
-    alert("Please provide a group name and select at least one member.");
-    return;
-  }
+    if (!groupName.trim() || selectedMembers.length === 0) {
+      alert("Please provide a group name and select at least one member.");
+      return;
+    }
 
-  console.log("🟢 Starting group creation...", {
-    API_BASE,
-    groupName,
-    creator: currentUser,
-    selectedMembers,
-  });
-
-  setLoading(true);
-
-  try {
-    // 🔹 Prepare request body
-    const payload = {
-      groupName,
-      creator: currentUser,
-      members: selectedMembers,
-    };
-
-    console.log("📤 Sending POST /groups request:", payload);
-
-    // 🔹 Send request
-    const res = await fetch(`${API_BASE}/groups`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    console.log("📥 Raw response:", res);
-
-    // 🔹 Parse response
-    const text = await res.text();
-    console.log("📦 Raw response text:", text);
-
-    let data;
+    setLoading(true);
     try {
-      data = JSON.parse(text);
-    } catch {
-      console.error("❌ Failed to parse JSON:", text);
-      throw new Error("Invalid JSON response from API");
+      const payload = {
+        groupName,
+        creator: currentUser,
+        members: selectedMembers,
+      };
+
+      const res = await fetch(`${API_BASE}/groups`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error("Invalid JSON response from API");
+      }
+
+      const parsed =
+        typeof data?.body === "string" ? JSON.parse(data.body) : data;
+
+      if (parsed?.success) {
+        alert("✅ Group created!");
+        setShowCreateModal(false);
+        setGroupName("");
+        setSelectedMembers([]);
+        loadGroups();
+      } else {
+        alert("⚠️ " + (parsed?.message || "Failed to create group"));
+      }
+    } catch (err) {
+      console.error("❌ Group creation failed:", err);
+      alert("❌ Failed to create group — check console for details.");
+    } finally {
+      setLoading(false);
     }
-
-    const parsed =
-      typeof data?.body === "string" ? JSON.parse(data.body) : data;
-
-    console.log("✅ Parsed response:", parsed);
-
-    // 🔹 Handle result
-    if (parsed?.success) {
-      console.log("🎉 Group successfully created:", parsed.group || parsed);
-      alert("✅ Group created!");
-      setShowCreateModal(false);
-      setGroupName("");
-      setSelectedMembers([]);
-      loadGroups();
-    } else {
-      console.warn("⚠️ Group creation failed:", parsed);
-      alert("⚠️ " + (parsed?.message || "Failed to create group"));
-    }
-  } catch (err) {
-    console.error("❌ Group creation failed:", err);
-    alert("❌ Failed to create group — check console for details.");
-  } finally {
-    console.log("⏹️ Group creation process finished");
-    setLoading(false);
   }
-}
-
 
   async function handleRemoveMember(username) {
     if (!selectedGroup) return;
@@ -249,7 +220,9 @@ export default function Sidebar({ onSelectUser, currentUser }) {
 
   async function handleDeleteGroup() {
     if (!selectedGroup) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedGroup.groupName}?`))
+    if (
+      !window.confirm(`Are you sure you want to delete ${selectedGroup.groupName}?`)
+    )
       return;
 
     setLoading(true);
@@ -451,6 +424,94 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       </div>
 
       {/* =======================================================
+          ➕ Create Group Modal
+      ======================================================= */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-[420px] p-5 relative">
+            <button
+              onClick={() => setShowCreateModal(false)}
+              className="absolute top-3 right-3 text-gray-500 hover:text-red-500"
+            >
+              <X size={18} />
+            </button>
+            <h3 className="text-lg font-semibold mb-3">Create New Group</h3>
+
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Group Name:
+              </label>
+              <input
+                type="text"
+                placeholder="Enter group name"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                className="w-full text-sm border border-slate-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-gray-400 outline-none"
+              />
+            </div>
+
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Select Members:
+              </label>
+              <div className="max-h-[140px] overflow-y-auto border rounded-md p-2 space-y-1">
+                {members.map((m) => (
+                  <label
+                    key={m.userid}
+                    className="flex items-center gap-2 text-sm cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedMembers.includes(m.userid)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedMembers([...selectedMembers, m.userid]);
+                        } else {
+                          setSelectedMembers(
+                            selectedMembers.filter((id) => id !== m.userid)
+                          );
+                        }
+                      }}
+                    />
+                    <span>{m.profileName || m.userid}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="bg-gray-300 text-gray-800 text-sm px-3 py-2 rounded-md hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateGroup}
+                disabled={loading}
+                className={`${
+                  loading
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                } text-white text-sm px-3 py-2 rounded-md flex items-center gap-1`}
+              >
+                {loading ? (
+                  <>
+                    <span className="animate-spin border-2 border-white border-t-transparent rounded-full w-3 h-3"></span>
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus size={14} /> Create
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =======================================================
           🧩 Manage Group Modal
       ======================================================= */}
       {showManageModal && selectedGroup && (
@@ -492,7 +553,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
               )}
             </ul>
 
-            {/* Add Member Dropdown */}
             <div className="flex items-center gap-2 mb-3">
               <select
                 value={newMember}
@@ -524,7 +584,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                 <Plus size={12} className="inline-block mr-1" /> Add
               </button>
             </div>
-
 
             <button
               onClick={handleDeleteGroup}
