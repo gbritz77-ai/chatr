@@ -22,9 +22,13 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
   const [schedule, setSchedule] = useState({
-    start: "09:00",
-    end: "17:00",
-    days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+    Mon: { start: "09:00", end: "17:00", enabled: true },
+    Tue: { start: "09:00", end: "17:00", enabled: true },
+    Wed: { start: "09:00", end: "17:00", enabled: true },
+    Thu: { start: "09:00", end: "17:00", enabled: true },
+    Fri: { start: "09:00", end: "17:00", enabled: true },
+    Sat: { start: "", end: "", enabled: false },
+    Sun: { start: "", end: "", enabled: false },
   });
   const [mySchedule, setMySchedule] = useState(null);
   const [isSelfActive, setIsSelfActive] = useState(false);
@@ -93,7 +97,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }, [mySchedule]);
 
   /* =========================================================
-     Unread counts (blue dots + favicon)
+     Unread counts
   ========================================================= */
   async function loadUnreadCounts() {
     try {
@@ -117,26 +121,14 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   /* =========================================================
      Helpers
   ========================================================= */
-  function isMemberActive(member) {
-    if (!member?.workSchedule) return false;
-    const { start, end, days } = member.workSchedule;
+  function checkIfSelfActive(sched) {
+    if (!sched) return false;
     const now = new Date();
     const currentDay = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][now.getDay()];
-    if (!days?.includes(currentDay)) return false;
-    const [sh, sm] = start.split(":").map(Number);
-    const [eh, em] = end.split(":").map(Number);
-    const mins = now.getHours() * 60 + now.getMinutes();
-    return mins >= sh * 60 + sm && mins <= eh * 60 + em;
-  }
-
-  function checkIfSelfActive(s) {
-    if (!s) return false;
-    const { start, end, days } = s;
-    const now = new Date();
-    const currentDay = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][now.getDay()];
-    if (!days?.includes(currentDay)) return false;
-    const [sh, sm] = start.split(":").map(Number);
-    const [eh, em] = end.split(":").map(Number);
+    const info = sched[currentDay];
+    if (!info || !info.enabled || !info.start || !info.end) return false;
+    const [sh, sm] = info.start.split(":").map(Number);
+    const [eh, em] = info.end.split(":").map(Number);
     const mins = now.getHours() * 60 + now.getMinutes();
     return mins >= sh * 60 + sm && mins <= eh * 60 + em;
   }
@@ -167,19 +159,12 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       const raw = await res.json();
       const data = typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
       if (data?.success && data.schedule) {
-        return {
-          start: data.schedule.start || "09:00",
-          end: data.schedule.end || "17:00",
-          days:
-            Array.isArray(data.schedule.days) && data.schedule.days.length
-              ? data.schedule.days
-              : ["Mon", "Tue", "Wed", "Thu", "Fri"],
-        };
+        return data.schedule;
       }
     } catch (err) {
       console.error("Fetch schedule failed:", err);
     }
-    return { start: "09:00", end: "17:00", days: ["Mon", "Tue", "Wed", "Thu", "Fri"] };
+    return schedule;
   }
 
   async function saveSchedule() {
@@ -270,7 +255,9 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                   className="flex-1 text-left text-sm flex items-center gap-2"
                 >
                   {g.groupname}
-                  {hasUnread && <span className="w-2 h-2 bg-blue-500 rounded-full inline-block" />}
+                  {hasUnread && (
+                    <span className="w-2 h-2 bg-green-500 rounded-full inline-block" />
+                  )}
                 </button>
                 <button
                   onClick={() => {
@@ -310,15 +297,10 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                 <div className="flex items-center gap-3">
                   <Avatar name={m.profileName} size={2.2} />
                   <span>{m.profileName}</span>
-                  {hasUnread && <span className="w-2 h-2 bg-blue-500 rounded-full inline-block" />}
+                  {hasUnread && (
+                    <span className="w-2 h-2 bg-green-500 rounded-full inline-block" />
+                  )}
                 </div>
-                <span
-                  className={`text-xs ${
-                    isMemberActive(m) ? "text-green-600" : "text-slate-400"
-                  }`}
-                >
-                  ●
-                </span>
               </button>
             );
           })}
@@ -363,282 +345,68 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         </div>
       </div>
 
-      {/* =========================
-          CREATE GROUP MODAL
-      ========================== */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-[460px] p-5 relative">
-            <button
-              onClick={() => setShowCreateModal(false)}
-              className="absolute top-3 right-3 text-gray-500 hover:text-red-500"
-            >
-              <X size={18} />
-            </button>
-
-            <h3 className="text-lg font-semibold mb-3">Create Group</h3>
-
-            <label className="text-sm font-medium text-gray-700">Group Name</label>
-            <input
-              type="text"
-              value={newGroupName}
-              onChange={(e) => setNewGroupName(e.target.value)}
-              className="w-full border px-2 py-1 rounded-md text-sm mb-3"
-              placeholder="e.g. Support Team"
-            />
-
-            <label className="text-sm font-medium text-gray-700">Add Members</label>
-            <div className="border rounded-md p-2 max-h-[200px] overflow-y-auto mb-3">
-              {members.map((m) => {
-                const checked = selectedMembers.includes(m.userid);
-                return (
-                  <label key={m.userid} className="flex items-center gap-2 text-sm py-1">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) => {
-                        setSelectedMembers((prev) =>
-                          e.target.checked
-                            ? [...prev, m.userid]
-                            : prev.filter((x) => x !== m.userid)
-                        );
-                      }}
-                    />
-                    {m.profileName} ({m.userid})
-                  </label>
-                );
-              })}
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="bg-gray-200 hover:bg-gray-300 text-sm px-3 py-2 rounded-md"
-              >
-                Cancel
-              </button>
-              <button
-                className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-2 rounded-md"
-                onClick={async () => {
-                  if (!newGroupName.trim()) return alert("Enter a group name.");
-                  try {
-                    const body = {
-                      groupName: newGroupName.trim(),
-                      creator: currentUser,
-                      members: selectedMembers,
-                    };
-                    const res = await fetch(`${API_BASE}/groups`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(body),
-                    });
-                    const raw = await res.json();
-                    const data = typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
-                    if (data?.success && data.group) {
-                      setGroups((prev) => [...prev, { ...data.group, groupname: data.group.groupName }]);
-                      setNewGroupName("");
-                      setSelectedMembers([]);
-                      setShowCreateModal(false);
-                    } else {
-                      alert("Failed to create group.");
-                    }
-                  } catch (e) {
-                    console.error(e);
-                    alert("Failed to create group.");
-                  }
-                }}
-              >
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =========================
-          EDIT/MANAGE GROUP MODAL
-      ========================== */}
-      {showManageModal && selectedGroup && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-[420px] p-5 relative">
-            <button
-              onClick={() => setShowManageModal(false)}
-              className="absolute top-3 right-3 text-gray-500 hover:text-red-500"
-            >
-              <X size={18} />
-            </button>
-            <h3 className="text-lg font-semibold mb-3">
-              Edit Group — {selectedGroup.groupname}
-            </h3>
-
-            {/* Members list */}
-            <div className="mb-3">
-              <label className="block text-sm font-medium mb-1 text-gray-700">
-                Members:
-              </label>
-              {selectedGroup.members?.length ? (
-                <ul className="border rounded-md p-2 max-h-[180px] overflow-y-auto">
-                  {selectedGroup.members.map((m) => (
-                    <li
-                      key={m}
-                      className="flex justify-between items-center py-1 border-b last:border-0"
-                    >
-                      <span className="text-sm">{m}</span>
-                      <button
-                        className="text-red-500 text-xs hover:underline"
-                        onClick={async () => {
-                          try {
-                            await fetch(`${API_BASE}/groups/remove`, {
-                              method: "PUT",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                groupid: selectedGroup.groupid,
-                                username: m,
-                              }),
-                            });
-                            setSelectedGroup((prev) => ({
-                              ...prev,
-                              members: prev.members.filter((x) => x !== m),
-                            }));
-                            // also update top-level groups state
-                            setGroups((prev) =>
-                              prev.map((g) =>
-                                g.groupid === selectedGroup.groupid
-                                  ? { ...g, members: g.members.filter((x) => x !== m) }
-                                  : g
-                              )
-                            );
-                          } catch (err) {
-                            alert("Failed to remove member");
-                            console.error(err);
-                          }
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-gray-500 italic">No members</p>
-              )}
-            </div>
-
-            {/* Add member */}
-            <div className="mb-3">
-              <label className="block text-sm font-medium mb-1 text-gray-700">
-                Add Member:
-              </label>
-              <select
-                className="w-full border rounded-md px-2 py-1 text-sm"
-                onChange={async (e) => {
-                  const user = e.target.value;
-                  if (!user) return;
-                  try {
-                    await fetch(`${API_BASE}/groups/add`, {
-                      method: "PUT",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        groupid: selectedGroup.groupid,
-                        username: user,
-                      }),
-                    });
-                    setSelectedGroup((prev) => ({
-                      ...prev,
-                      members: [...prev.members, user],
-                    }));
-                    setGroups((prev) =>
-                      prev.map((g) =>
-                        g.groupid === selectedGroup.groupid
-                          ? { ...g, members: [...g.members, user] }
-                          : g
-                      )
-                    );
-                  } catch (err) {
-                    alert("Failed to add member");
-                    console.error(err);
-                  }
-                }}
-              >
-                <option value="">Select member...</option>
-                {members
-                  .filter((m) => !selectedGroup.members.includes(m.userid))
-                  .map((m) => (
-                    <option key={m.userid} value={m.userid}>
-                      {m.profileName} ({m.userid})
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            {/* Footer */}
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                onClick={() => setShowManageModal(false)}
-                className="text-gray-700 bg-gray-200 hover:bg-gray-300 text-sm px-3 py-2 rounded-md"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =========================
-          TIME MANAGEMENT MODAL
-      ========================== */}
+      {/* 🕒 TIME MANAGEMENT MODAL */}
       {showScheduleModal && selectedMember && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-[420px] p-5 relative">
+          <div className="bg-white rounded-lg shadow-xl w-[460px] p-5 relative">
             <button
               onClick={() => setShowScheduleModal(false)}
               className="absolute top-3 right-3 text-gray-500 hover:text-red-500"
             >
               <X size={18} />
             </button>
+
             <h3 className="text-lg font-semibold mb-3">
               Working Hours — {selectedMember.profileName}
             </h3>
 
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Start:</label>
-                <input
-                  type="time"
-                  value={schedule.start}
-                  onChange={(e) => setSchedule({ ...schedule, start: e.target.value })}
-                  className="w-full border px-2 py-1 rounded-md text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">End:</label>
-                <input
-                  type="time"
-                  value={schedule.end}
-                  onChange={(e) => setSchedule({ ...schedule, end: e.target.value })}
-                  className="w-full border px-2 py-1 rounded-md text-sm"
-                />
-              </div>
-            </div>
+            <div className="space-y-3">
+              {Object.entries(schedule).map(([day, info]) => (
+                <div key={day} className="flex items-center justify-between border-b pb-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 w-20">
+                    <input
+                      type="checkbox"
+                      checked={info.enabled}
+                      onChange={(e) =>
+                        setSchedule((prev) => ({
+                          ...prev,
+                          [day]: { ...info, enabled: e.target.checked },
+                        }))
+                      }
+                    />
+                    {day}
+                  </label>
 
-            <label className="text-sm font-medium text-gray-700">Days:</label>
-            <div className="grid grid-cols-3 gap-2 my-2">
-              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-                <label key={day} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={schedule.days.includes(day)}
-                    onChange={(e) =>
-                      setSchedule((prev) => ({
-                        ...prev,
-                        days: e.target.checked
-                          ? [...prev.days, day]
-                          : prev.days.filter((d) => d !== day),
-                      }))
-                    }
-                  />
-                  {day}
-                </label>
+                  {info.enabled ? (
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="time"
+                        value={info.start}
+                        onChange={(e) =>
+                          setSchedule((prev) => ({
+                            ...prev,
+                            [day]: { ...info, start: e.target.value },
+                          }))
+                        }
+                        className="border px-2 py-1 rounded-md text-sm"
+                      />
+                      <span className="text-gray-500">→</span>
+                      <input
+                        type="time"
+                        value={info.end}
+                        onChange={(e) =>
+                          setSchedule((prev) => ({
+                            ...prev,
+                            [day]: { ...info, end: e.target.value },
+                          }))
+                        }
+                        className="border px-2 py-1 rounded-md text-sm"
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-gray-400 text-sm italic">Off</div>
+                  )}
+                </div>
               ))}
             </div>
 
@@ -653,7 +421,9 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                 onClick={saveSchedule}
                 disabled={loading}
                 className={`${
-                  loading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
+                  loading
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
                 } text-white text-sm px-3 py-2 rounded-md`}
               >
                 Save
