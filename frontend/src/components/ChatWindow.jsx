@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — safe, normalized, and fully functional
+   💬 ChatWindow — fully stable version (Nov 2025)
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -36,24 +36,27 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const currentProfileName = localStorage.getItem("profileName") || currentUser;
 
   /* ----------------------------------------------------
-     🧩 Normalize Chat ID — consistent with backend
+     🧩 Normalize Chat ID (backend-compatible)
   ---------------------------------------------------- */
   function normalizeChatId(userA, userB) {
-    if (!userA || !userB) return null;
+    if (!userA || !userB) return "";
     const sorted = [userA, userB].map((x) => x.toLowerCase()).sort();
     return `CHAT#${sorted[0]}#${sorted[1]}`;
   }
 
   /* ----------------------------------------------------
-     🔗 Get Signed URL for downloads
+     🔗 Get Signed URL for attachments
   ---------------------------------------------------- */
   async function getSignedUrl(fileKey) {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE}/presign-download`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: fileKey }),
-      });
+      const res = await fetch(
+        `${import.meta.env.VITE_API_BASE}/presign-download`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: fileKey }),
+        }
+      );
       const data = await res.json();
       return data?.viewURL || null;
     } catch (err) {
@@ -75,17 +78,15 @@ export default function ChatWindow({ activeUser, currentUser }) {
       } else if (activeUser?.type === "user") {
         const userB = activeUser.username || activeUser.id;
         const chatId = normalizeChatId(currentUser, userB);
-        if (!chatId) return;
         url = `/messages?chatId=${encodeURIComponent(chatId)}`;
-      } else {
-        return;
       }
+
+      if (!url) return;
 
       const res = await getJSON(url);
       if (res?.success && Array.isArray(res.messages)) {
         setMessages(res.messages);
       } else {
-        console.warn("⚠️ Failed to load messages:", res);
         setMessages([]);
       }
     } catch (err) {
@@ -105,6 +106,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   ---------------------------------------------------- */
   async function markAsRead() {
     if (!activeUser || !currentUser) return;
+
     try {
       const chatid =
         activeUser?.type === "group"
@@ -124,6 +126,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   ---------------------------------------------------- */
   function handleTypingChange(e) {
     setText(e.target.value);
+
     if (!isTyping && activeUser) {
       setIsTyping(true);
       postJSON("/typing/start", {
@@ -144,7 +147,10 @@ export default function ChatWindow({ activeUser, currentUser }) {
           chatid:
             activeUser?.type === "group"
               ? `GROUP#${activeUser.id}`
-              : normalizeChatId(currentUser, activeUser.username || activeUser.id),
+              : normalizeChatId(
+                  currentUser,
+                  activeUser.username || activeUser.id
+                ),
         });
       }
     }, 2000);
@@ -162,78 +168,56 @@ export default function ChatWindow({ activeUser, currentUser }) {
 
   useEffect(() => {
     if (autoScrollEnabled)
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
   }, [messages]);
 
   /* ----------------------------------------------------
      SEND MESSAGE
   ---------------------------------------------------- */
   async function sendMessage(e) {
-  e.preventDefault();
-  if (!text.trim() && !attachment) return;
+    e.preventDefault();
+    if (!text.trim() && !attachment) return;
 
-  const payload = {
-    sender: currentUser,
-    recipient: activeUser?.username || null,
-    groupid: activeUser?.type === "group" ? activeUser.id : null,
-    text: text.trim(),
-  };
+    const payload = {
+      sender: currentUser,
+      recipient: activeUser?.username || null,
+      groupid: activeUser?.type === "group" ? activeUser.id : null,
+      text: text.trim(),
+    };
 
-  try {
-    setUploading(true);
-
-    // 🔹 Handle attachment upload first
-    if (attachment && attachment instanceof File) {
-      // 1️⃣ Request presigned upload URL
-      const uploadRes = await fetch(`${import.meta.env.VITE_API_BASE}/presign-upload`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: attachment.name,
-          fileType: attachment.type,
-        }),
-      });
-
-      const uploadData = await uploadRes.json();
-      if (!uploadData?.uploadURL || !uploadData?.fileKey) {
-        throw new Error("Failed to get presigned upload URL");
-      }
-
-      // 2️⃣ Upload the file to S3
-      await fetch(uploadData.uploadURL, {
-        method: "PUT",
-        headers: { "Content-Type": attachment.type },
-        body: attachment,
-      });
-
-      // 3️⃣ Attach metadata for backend
-      payload.attachmentKey = uploadData.fileKey;
-      payload.attachmentType = attachment.type;
+    // 🔹 Attachments handled directly (no upload API)
+    if (attachment) {
+      payload.attachmentKey =
+        attachment.key || attachment.url || attachment.name || null;
+      payload.attachmentType = attachment.type || "file";
     }
 
-    // 🔹 Add chatId for 1-to-1 chats
     if (activeUser?.type === "user") {
       const userB = activeUser.username || activeUser.id;
       payload.chatId = normalizeChatId(currentUser, userB);
     }
 
-    // 🔹 Send the message
-    const res = await postJSON("/messages", payload);
-    if (res.success) {
-      setMessages((prev) => [...prev, res.item]);
-      setText("");
-      setAttachment(null);
-      await markAsRead();
-    } else {
-      console.error("❌ Message send failed:", res);
-    }
-  } catch (err) {
-    console.error("❌ sendMessage error:", err);
-  } finally {
-    setUploading(false);
-  }
-}
+    try {
+      setUploading(true);
+      const res = await postJSON("/messages", payload);
 
+      if (res.success) {
+        setMessages((prev) => [...prev, res.item]);
+        setText("");
+        setAttachment(null);
+        await markAsRead();
+      } else {
+        console.error("❌ Message send failed:", res);
+      }
+    } catch (err) {
+      console.error("❌ sendMessage error:", err);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   /* ----------------------------------------------------
      GUARD RENDER IF NO ACTIVE USER
@@ -263,7 +247,9 @@ export default function ChatWindow({ activeUser, currentUser }) {
           <div>
             <div>{activeUser.name || activeUser.id}</div>
             {remoteTyping && (
-              <div className="text-xs text-slate-500 animate-pulse">typing...</div>
+              <div className="text-xs text-slate-500 animate-pulse">
+                typing...
+              </div>
             )}
           </div>
         </div>
@@ -281,7 +267,6 @@ export default function ChatWindow({ activeUser, currentUser }) {
               key={msg.messageid || msg.timestamp}
               msg={msg}
               currentUser={currentUser}
-              currentProfileName={currentProfileName}
               getSignedUrl={getSignedUrl}
             />
           ))
@@ -421,7 +406,7 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
         if (url) setViewUrl(url);
       });
     }
-  }, [msg.attachmentKey, viewUrl]);
+  }, [msg.attachmentKey]);
 
   const isMine = msg.sender === currentUser;
   const senderName = isMine
