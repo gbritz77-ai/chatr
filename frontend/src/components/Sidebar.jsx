@@ -1,13 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getMembers, API_BASE } from "../lib/api";
 import { Avatar } from "./Avatar";
-import {
-  LogOut,
-  Users,
-  X,
-  Clock,
-  Plus,
-} from "lucide-react";
+import { LogOut, Users, X, Clock } from "lucide-react";
 
 export default function Sidebar({ onSelectUser, currentUser }) {
   const [members, setMembers] = useState([]);
@@ -35,9 +29,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     if (!member?.workSchedule) return false;
     const { start, end, days } = member.workSchedule;
     const now = new Date();
-    const currentDay = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
-      now.getDay()
-    ];
+    const currentDay = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][now.getDay()];
     if (!days?.includes(currentDay)) return false;
     const [startH, startM] = start.split(":").map(Number);
     const [endH, endM] = end.split(":").map(Number);
@@ -86,13 +78,11 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         const membersData = data?.members || data?.Items || [];
         setMembers(membersData);
 
-        // fetch groups
-        const groupRes = await fetch(`${API_BASE}/groups`);
+        // ✅ FIX: include current user in query
+        const groupRes = await fetch(`${API_BASE}/groups?username=${encodeURIComponent(currentUser)}`);
         const groupRaw = await groupRes.json();
         const groupData =
-          typeof groupRaw?.body === "string"
-            ? JSON.parse(groupRaw.body)
-            : groupRaw;
+          typeof groupRaw?.body === "string" ? JSON.parse(groupRaw.body) : groupRaw;
         setGroups(groupData?.groups || groupData?.Items || []);
 
         // load my schedule
@@ -130,9 +120,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     if (!currentUser) return;
     try {
       const res = await fetch(
-        `${API_BASE}/messages/unread-counts?username=${encodeURIComponent(
-          currentUser
-        )}`
+        `${API_BASE}/messages/unread-counts?username=${encodeURIComponent(currentUser)}`
       );
       const raw = await res.json();
       const data = typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
@@ -149,6 +137,22 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     const interval = setInterval(loadUnreadCounts, 8000);
     return () => clearInterval(interval);
   }, [currentUser]);
+
+  /* =========================================================
+     ✅ FIXED: markRead helper (was missing)
+  ========================================================= */
+  async function markRead(chatKey) {
+    try {
+      await fetch(`${API_BASE}/messages/mark-read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatKey, username: currentUser }),
+      });
+      setUnreadMap((prev) => ({ ...prev, [chatKey]: 0 }));
+    } catch (err) {
+      console.error("❌ Failed to mark chat as read:", err);
+    }
+  }
 
   /* =========================================================
      🕒 Schedule Management
