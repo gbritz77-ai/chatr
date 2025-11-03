@@ -299,6 +299,224 @@ export default function Sidebar({ onSelectUser, currentUser }) {
           </button>
         </div>
       </div>
+      {/* 🛠️ Edit Group Modal */}
+{showManageModal && selectedGroup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-lg shadow-xl w-[420px] p-5 relative">
+      <button
+        onClick={() => setShowManageModal(false)}
+        className="absolute top-3 right-3 text-gray-500 hover:text-red-500"
+      >
+        <X size={18} />
+      </button>
+      <h3 className="text-lg font-semibold mb-3">
+        Edit Group — {selectedGroup.groupname}
+      </h3>
+
+      {/* Member List */}
+      <div className="mb-3">
+        <label className="block text-sm font-medium mb-1 text-gray-700">
+          Members:
+        </label>
+        {selectedGroup.members?.length ? (
+          <ul className="border rounded-md p-2 max-h-[180px] overflow-y-auto">
+            {selectedGroup.members.map((m) => (
+              <li
+                key={m}
+                className="flex justify-between items-center py-1 border-b last:border-0"
+              >
+                <span className="text-sm">{m}</span>
+                <button
+                  className="text-red-500 text-xs hover:underline"
+                  onClick={async () => {
+                    try {
+                      await fetch(`${API_BASE}/groups/remove`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          groupid: selectedGroup.groupid,
+                          username: m,
+                        }),
+                      });
+                      setSelectedGroup((prev) => ({
+                        ...prev,
+                        members: prev.members.filter((x) => x !== m),
+                      }));
+                    } catch (err) {
+                      alert("❌ Failed to remove member");
+                      console.error(err);
+                    }
+                  }}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-gray-500 italic">No members</p>
+        )}
+      </div>
+
+      {/* Add Member */}
+      <div className="mb-3">
+        <label className="block text-sm font-medium mb-1 text-gray-700">
+          Add Member:
+        </label>
+        <select
+          className="w-full border rounded-md px-2 py-1 text-sm"
+          onChange={async (e) => {
+            const user = e.target.value;
+            if (!user) return;
+            try {
+              await fetch(`${API_BASE}/groups/add`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  groupid: selectedGroup.groupid,
+                  username: user,
+                }),
+              });
+              setSelectedGroup((prev) => ({
+                ...prev,
+                members: [...prev.members, user],
+              }));
+            } catch (err) {
+              alert("❌ Failed to add member");
+              console.error(err);
+            }
+          }}
+        >
+          <option value="">Select member...</option>
+          {members
+            .filter(
+              (m) => !selectedGroup.members.includes(m.userid)
+            )
+            .map((m) => (
+              <option key={m.userid} value={m.userid}>
+                {m.profileName} ({m.userid})
+              </option>
+            ))}
+        </select>
+      </div>
+
+      {/* Delete group */}
+      <div className="flex justify-end gap-2 mt-4">
+        <button
+          onClick={async () => {
+            if (!confirm("Are you sure you want to delete this group?")) return;
+            try {
+              await fetch(`${API_BASE}/groups/delete`, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ groupid: selectedGroup.groupid }),
+              });
+              setGroups((prev) =>
+                prev.filter((g) => g.groupid !== selectedGroup.groupid)
+              );
+              setShowManageModal(false);
+            } catch (err) {
+              alert("❌ Failed to delete group");
+              console.error(err);
+            }
+          }}
+          className="text-white bg-red-600 hover:bg-red-700 text-sm px-3 py-2 rounded-md"
+        >
+          Delete Group
+        </button>
+        <button
+          onClick={() => setShowManageModal(false)}
+          className="text-gray-700 bg-gray-200 hover:bg-gray-300 text-sm px-3 py-2 rounded-md"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* 🕒 Schedule Modal (Time Management) */}
+{showScheduleModal && selectedMember && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-lg shadow-xl w-[420px] p-5 relative">
+      <button
+        onClick={() => setShowScheduleModal(false)}
+        className="absolute top-3 right-3 text-gray-500 hover:text-red-500"
+      >
+        <X size={18} />
+      </button>
+      <h3 className="text-lg font-semibold mb-3">
+        Working Hours — {selectedMember.profileName}
+      </h3>
+
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className="text-sm font-medium text-gray-700">Start:</label>
+          <input
+            type="time"
+            value={schedule.start}
+            onChange={(e) =>
+              setSchedule({ ...schedule, start: e.target.value })
+            }
+            className="w-full border px-2 py-1 rounded-md text-sm"
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-gray-700">End:</label>
+          <input
+            type="time"
+            value={schedule.end}
+            onChange={(e) =>
+              setSchedule({ ...schedule, end: e.target.value })
+            }
+            className="w-full border px-2 py-1 rounded-md text-sm"
+          />
+        </div>
+      </div>
+
+      <label className="text-sm font-medium text-gray-700">Days:</label>
+      <div className="grid grid-cols-3 gap-2 my-2">
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
+          <label key={day} className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={schedule.days.includes(day)}
+              onChange={(e) =>
+                setSchedule((prev) => ({
+                  ...prev,
+                  days: e.target.checked
+                    ? [...prev.days, day]
+                    : prev.days.filter((d) => d !== day),
+                }))
+              }
+            />
+            {day}
+          </label>
+        ))}
+      </div>
+
+      <div className="flex justify-end mt-4 gap-2">
+        <button
+          onClick={() => setShowScheduleModal(false)}
+          className="bg-gray-300 text-gray-800 text-sm px-3 py-2 rounded-md hover:bg-gray-400"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={saveSchedule}
+          disabled={loading}
+          className={`${
+            loading
+              ? "bg-gray-400 cursor-not-allowed"
+              : "bg-blue-600 hover:bg-blue-700"
+          } text-white text-sm px-3 py-2 rounded-md`}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </aside>
   );
 }
