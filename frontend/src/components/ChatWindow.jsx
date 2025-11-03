@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — clean + consistent CHAT# normalization
+   💬 ChatWindow — safe, normalized, and fully functional
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -38,12 +38,11 @@ export default function ChatWindow({ activeUser, currentUser }) {
   /* ----------------------------------------------------
      🧩 Normalize Chat ID — consistent with backend
   ---------------------------------------------------- */
-  if (activeUser.type === "user") {
-  const userB = activeUser.username || activeUser.id;
-  const chatId = normalizeChatId(currentUser, userB);
-  url = `/messages?chatId=${encodeURIComponent(chatId)}`;
-}
-
+  function normalizeChatId(userA, userB) {
+    if (!userA || !userB) return null;
+    const sorted = [userA, userB].map((x) => x.toLowerCase()).sort();
+    return `CHAT#${sorted[0]}#${sorted[1]}`;
+  }
 
   /* ----------------------------------------------------
      🔗 Get Signed URL for downloads
@@ -71,11 +70,15 @@ export default function ChatWindow({ activeUser, currentUser }) {
 
     try {
       let url = "";
-      if (activeUser.type === "group") {
+      if (activeUser?.type === "group") {
         url = `/messages?groupid=${encodeURIComponent(activeUser.id)}`;
-      } else if (activeUser.type === "user") {
-        const chatId = normalizeChatId(currentUser, activeUser.username);
+      } else if (activeUser?.type === "user") {
+        const userB = activeUser.username || activeUser.id;
+        const chatId = normalizeChatId(currentUser, userB);
+        if (!chatId) return;
         url = `/messages?chatId=${encodeURIComponent(chatId)}`;
+      } else {
+        return;
       }
 
       const res = await getJSON(url);
@@ -104,10 +107,11 @@ export default function ChatWindow({ activeUser, currentUser }) {
     if (!activeUser || !currentUser) return;
     try {
       const chatid =
-  activeUser.type === "group"
-    ? `GROUP#${activeUser.id}`
-    : normalizeChatId(currentUser, activeUser.username || activeUser.id);
+        activeUser?.type === "group"
+          ? `GROUP#${activeUser.id}`
+          : normalizeChatId(currentUser, activeUser.username || activeUser.id);
 
+      if (!chatid) return;
       await postJSON("/messages/mark-read", { chatid, username: currentUser });
       setLastReadTimestamp(new Date().toISOString());
     } catch (err) {
@@ -120,27 +124,29 @@ export default function ChatWindow({ activeUser, currentUser }) {
   ---------------------------------------------------- */
   function handleTypingChange(e) {
     setText(e.target.value);
-    if (!isTyping) {
+    if (!isTyping && activeUser) {
       setIsTyping(true);
       postJSON("/typing/start", {
         username: currentUser,
         chatid:
-          activeUser.type === "group"
+          activeUser?.type === "group"
             ? `GROUP#${activeUser.id}`
-            : normalizeChatId(currentUser, activeUser.username),
+            : normalizeChatId(currentUser, activeUser.username || activeUser.id),
       });
     }
 
     clearTimeout(typingTimer.current);
     typingTimer.current = setTimeout(() => {
       setIsTyping(false);
-      postJSON("/typing/stop", {
-        username: currentUser,
-        chatid:
-          activeUser.type === "group"
-            ? `GROUP#${activeUser.id}`
-            : normalizeChatId(currentUser, activeUser.username),
-      });
+      if (activeUser) {
+        postJSON("/typing/stop", {
+          username: currentUser,
+          chatid:
+            activeUser?.type === "group"
+              ? `GROUP#${activeUser.id}`
+              : normalizeChatId(currentUser, activeUser.username || activeUser.id),
+        });
+      }
     }, 2000);
   }
 
@@ -179,10 +185,9 @@ export default function ChatWindow({ activeUser, currentUser }) {
     }
 
     if (activeUser?.type === "user") {
-  const userB = activeUser.username || activeUser.id;
-  payload.chatId = normalizeChatId(currentUser, userB);
-}
-
+      const userB = activeUser.username || activeUser.id;
+      payload.chatId = normalizeChatId(currentUser, userB);
+    }
 
     try {
       setUploading(true);
@@ -191,7 +196,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
         setMessages((prev) => [...prev, res.item]);
         setText("");
         setAttachment(null);
-        await markAsRead(); // immediately mark own message as read
+        await markAsRead();
       }
     } catch (err) {
       console.error("❌ sendMessage error:", err);
@@ -201,32 +206,37 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
+     GUARD RENDER IF NO ACTIVE USER
+  ---------------------------------------------------- */
+  if (!activeUser) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-slate-400 italic">
+        Select a contact or group to start chatting
+      </div>
+    );
+  }
+
+  /* ----------------------------------------------------
      RENDER
   ---------------------------------------------------- */
   return (
     <div className="flex flex-col flex-1 h-screen ml-[320px] bg-slate-50 relative">
       {/* Header */}
       <div className="sticky top-0 z-10 border-b bg-white/70 backdrop-blur-lg p-4 font-semibold text-slate-700 flex items-center justify-between">
-        {activeUser ? (
-          <div className="flex items-center gap-3">
-            <Avatar
-              seed={activeUser.name || activeUser.id}
-              username={activeUser.name || activeUser.id}
-              size={10}
-              style="micah"
-            />
-            <div>
-              <div>{activeUser.name || activeUser.id}</div>
-              {remoteTyping && (
-                <div className="text-xs text-slate-500 animate-pulse">
-                  typing...
-                </div>
-              )}
-            </div>
+        <div className="flex items-center gap-3">
+          <Avatar
+            seed={activeUser.name || activeUser.id}
+            username={activeUser.name || activeUser.id}
+            size={10}
+            style="micah"
+          />
+          <div>
+            <div>{activeUser.name || activeUser.id}</div>
+            {remoteTyping && (
+              <div className="text-xs text-slate-500 animate-pulse">typing...</div>
+            )}
           </div>
-        ) : (
-          "Welcome to CHATr"
-        )}
+        </div>
       </div>
 
       {/* Messages */}
@@ -235,145 +245,136 @@ export default function ChatWindow({ activeUser, currentUser }) {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto p-5 space-y-4"
       >
-        {activeUser ? (
-          messages.length ? (
-            messages.map((msg) => (
-              <MessageBubble
-                key={msg.messageid || msg.timestamp}
-                msg={msg}
-                currentUser={currentUser}
-                currentProfileName={currentProfileName}
-                getSignedUrl={getSignedUrl}
-              />
-            ))
-          ) : (
-            <p className="text-center text-slate-400 italic">No messages yet</p>
-          )
+        {messages.length ? (
+          messages.map((msg) => (
+            <MessageBubble
+              key={msg.messageid || msg.timestamp}
+              msg={msg}
+              currentUser={currentUser}
+              currentProfileName={currentProfileName}
+              getSignedUrl={getSignedUrl}
+            />
+          ))
         ) : (
-          <p className="text-center text-slate-400 italic mt-10">
-            Select a contact or group to start chatting
-          </p>
+          <p className="text-center text-slate-400 italic">No messages yet</p>
         )}
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input Bar */}
-      {activeUser && (
-        <div className="sticky bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-inner px-6 py-3">
-          <form onSubmit={sendMessage} className="flex items-center gap-3 relative">
-            {/* Attachment Button */}
-            <input
-              type="file"
-              accept="image/*,video/*,application/pdf"
-              className="hidden"
-              id="fileInput"
-              onChange={(e) => {
-                const file = e.target.files[0];
-                if (file) setAttachment(file);
-              }}
-            />
+      <div className="sticky bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-inner px-6 py-3">
+        <form onSubmit={sendMessage} className="flex items-center gap-3 relative">
+          <input
+            type="file"
+            accept="image/*,video/*,application/pdf"
+            className="hidden"
+            id="fileInput"
+            onChange={(e) => {
+              const file = e.target.files[0];
+              if (file) setAttachment(file);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => document.getElementById("fileInput").click()}
+            className="text-slate-500 hover:text-blue-600 transition"
+            title="Attach file"
+          >
+            <Paperclip size={20} />
+          </button>
+
+          {/* Emoji Picker */}
+          <div className="relative">
             <button
               type="button"
-              onClick={() => document.getElementById("fileInput").click()}
-              className="text-slate-500 hover:text-blue-600 transition"
-              title="Attach file"
+              onClick={() => setShowEmojiPicker((prev) => !prev)}
+              className="text-slate-500 hover:text-yellow-500 transition"
+              title="Add emoji"
             >
-              <Paperclip size={20} />
+              <Smile size={22} />
             </button>
-
-            {/* Emoji Picker */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowEmojiPicker((prev) => !prev)}
-                className="text-slate-500 hover:text-yellow-500 transition"
-                title="Add emoji"
+            {showEmojiPicker && (
+              <div
+                ref={pickerRef}
+                className="absolute bottom-12 left-0 z-50 bg-white shadow-lg border rounded-xl"
               >
-                <Smile size={22} />
-              </button>
-              {showEmojiPicker && (
-                <div
-                  ref={pickerRef}
-                  className="absolute bottom-12 left-0 z-50 bg-white shadow-lg border rounded-xl"
-                >
-                  <Picker
-                    data={data}
-                    onEmojiSelect={(e) => setText((t) => t + e.native)}
-                    theme="light"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* GIF Picker */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowGifPicker((prev) => !prev)}
-                className="text-slate-500 hover:text-pink-600 transition"
-                title="Send GIF"
-              >
-                <Image size={22} />
-              </button>
-              {showGifPicker && (
-                <div className="absolute bottom-12 left-0 z-50 bg-white shadow-lg border rounded-xl">
-                  <GifPicker
-                    onSelect={(gifUrl) => {
-                      setAttachment({
-                        type: "image/gif",
-                        name: gifUrl,
-                        url: gifUrl,
-                      });
-                      setShowGifPicker(false);
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-
-            <input
-              type="text"
-              placeholder="Type a message..."
-              value={text}
-              onChange={handleTypingChange}
-              className="flex-1 bg-transparent border-none focus:outline-none text-sm text-slate-700 px-2"
-            />
-
-            <button
-              type="submit"
-              disabled={uploading}
-              className={`p-3 rounded-full shadow-sm transition ${
-                uploading
-                  ? "bg-slate-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700 text-white"
-              }`}
-              title="Send message"
-            >
-              {uploading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Send className="w-5 h-5" />
-              )}
-            </button>
-          </form>
-
-          {attachment && (
-            <div className="mt-2 flex items-center justify-between text-xs text-slate-600 bg-slate-100 rounded-lg px-3 py-2">
-              <div className="flex items-center gap-2 truncate">
-                <FileText size={14} />
-                <span className="truncate">{attachment.name}</span>
+                <Picker
+                  data={data}
+                  onEmojiSelect={(e) => setText((t) => t + e.native)}
+                  theme="light"
+                />
               </div>
-              <button
-                type="button"
-                className="text-red-500 hover:text-red-700"
-                onClick={() => setAttachment(null)}
-              >
-                Remove
-              </button>
+            )}
+          </div>
+
+          {/* GIF Picker */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowGifPicker((prev) => !prev)}
+              className="text-slate-500 hover:text-pink-600 transition"
+              title="Send GIF"
+            >
+              <Image size={22} />
+            </button>
+            {showGifPicker && (
+              <div className="absolute bottom-12 left-0 z-50 bg-white shadow-lg border rounded-xl">
+                <GifPicker
+                  onSelect={(gifUrl) => {
+                    setAttachment({
+                      type: "image/gif",
+                      name: gifUrl,
+                      url: gifUrl,
+                    });
+                    setShowGifPicker(false);
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
+          <input
+            type="text"
+            placeholder="Type a message..."
+            value={text}
+            onChange={handleTypingChange}
+            className="flex-1 bg-transparent border-none focus:outline-none text-sm text-slate-700 px-2"
+          />
+
+          <button
+            type="submit"
+            disabled={uploading}
+            className={`p-3 rounded-full shadow-sm transition ${
+              uploading
+                ? "bg-slate-400 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700 text-white"
+            }`}
+            title="Send message"
+          >
+            {uploading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
+          </button>
+        </form>
+
+        {attachment && (
+          <div className="mt-2 flex items-center justify-between text-xs text-slate-600 bg-slate-100 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 truncate">
+              <FileText size={14} />
+              <span className="truncate">{attachment.name}</span>
             </div>
-          )}
-        </div>
-      )}
+            <button
+              type="button"
+              className="text-red-500 hover:text-red-700"
+              onClick={() => setAttachment(null)}
+            >
+              Remove
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -381,7 +382,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
 /* ============================================================
    💬 MessageBubble Component
 ============================================================ */
-function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
+function MessageBubble({ msg, currentUser, getSignedUrl }) {
   const [viewUrl, setViewUrl] = useState(msg.attachmentUrl || null);
 
   useEffect(() => {
@@ -396,13 +397,14 @@ function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
   const senderName = isMine
     ? "You"
     : msg.senderProfileName || msg.sender?.split("@")[0] || msg.sender;
-      const time = new Date(msg.timestamp).toLocaleString([], {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+
+  const time = new Date(msg.timestamp).toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   const fileType = msg.attachmentType || "";
   const fileName = (msg.attachmentKey || msg.attachmentUrl || "").toLowerCase();
@@ -412,9 +414,7 @@ function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
   const isOtherFile = msg.attachmentKey && !isImage && !isPDF;
 
   return (
-    <div
-      className={`flex flex-col gap-1 ${isMine ? "items-end" : "items-start"}`}
-    >
+    <div className={`flex flex-col gap-1 ${isMine ? "items-end" : "items-start"}`}>
       <div
         className={`text-xs font-semibold mb-1 ${
           isMine ? "text-blue-500" : "text-slate-500"
@@ -425,14 +425,10 @@ function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
 
       <div
         className={`p-3 rounded-lg max-w-[70%] ${
-          isMine
-            ? "bg-blue-600 text-white ml-auto"
-            : "bg-white border text-slate-800"
+          isMine ? "bg-blue-600 text-white ml-auto" : "bg-white border text-slate-800"
         }`}
       >
-        {msg.text && (
-          <div className="whitespace-pre-wrap break-words">{msg.text}</div>
-        )}
+        {msg.text && <div className="whitespace-pre-wrap break-words">{msg.text}</div>}
 
         {viewUrl && isImage && (
           <img
@@ -462,9 +458,7 @@ function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
         )}
 
         <div
-          className={`text-xs mt-2 ${
-            isMine ? "text-blue-200" : "text-slate-500"
-          }`}
+          className={`text-xs mt-2 ${isMine ? "text-blue-200" : "text-slate-500"}`}
         >
           {time}
         </div>
