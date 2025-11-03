@@ -23,14 +23,12 @@ export default function Sidebar({ onSelectUser, currentUser }) {
 
   const profileName = localStorage.getItem("profileName") || currentUser;
 
-  /* =========================================================
-     🔔 Tab Notification Hook (for favicon blue dot)
-  ========================================================= */
+  // 🔔 Blue-dot favicon
   const totalUnread = Object.values(unreadMap || {}).reduce((a, b) => a + b, 0);
   useTabNotification(totalUnread);
 
   /* =========================================================
-     🔧 Utility: Determine if member is active right now
+     🔧 Active status helpers
   ========================================================= */
   function isMemberActive(member) {
     if (!member?.workSchedule) return false;
@@ -40,10 +38,10 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     if (!days?.includes(currentDay)) return false;
     const [startH, startM] = start.split(":").map(Number);
     const [endH, endM] = end.split(":").map(Number);
-    const currentMins = now.getHours() * 60 + now.getMinutes();
+    const mins = now.getHours() * 60 + now.getMinutes();
     const startMins = startH * 60 + startM;
     const endMins = endH * 60 + endM;
-    return currentMins >= startMins && currentMins <= endMins;
+    return mins >= startMins && mins <= endMins;
   }
 
   function checkIfSelfActive(schedule) {
@@ -54,10 +52,10 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     if (!days?.includes(currentDay)) return false;
     const [startH, startM] = start.split(":").map(Number);
     const [endH, endM] = end.split(":").map(Number);
-    const currentMins = now.getHours() * 60 + now.getMinutes();
+    const mins = now.getHours() * 60 + now.getMinutes();
     const startMins = startH * 60 + startM;
     const endMins = endH * 60 + endM;
-    return currentMins >= startMins && currentMins <= endMins;
+    return mins >= startMins && mins <= endMins;
   }
 
   useEffect(() => {
@@ -68,7 +66,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }, [mySchedule]);
 
   /* =========================================================
-     Load Members & Groups
+     🔁 Load Members & Groups
   ========================================================= */
   useEffect(() => {
     async function loadMembersAndGroups() {
@@ -84,19 +82,23 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         const membersData = data?.members || data?.Items || [];
         setMembers(membersData);
 
-        const groupRes = await fetch(
-          `${API_BASE}/groups?username=${encodeURIComponent(currentUser)}`
-        );
+        // ✅ FIXED: remove username query param (caused 400)
+        const groupRes = await fetch(`${API_BASE}/groups`);
         const groupRaw = await groupRes.json();
         const groupData =
           typeof groupRaw?.body === "string" ? JSON.parse(groupRaw.body) : groupRaw;
-        setGroups(groupData?.groups || groupData?.Items || []);
 
-        const me = membersData.find(
-          (m) =>
-            m.userid?.toLowerCase() === currentUser?.toLowerCase() ||
-            m.profileName?.toLowerCase() === profileName?.toLowerCase()
-        );
+        const parsedGroups = groupData?.groups || groupData?.Items || [];
+        setGroups(Array.isArray(parsedGroups) ? parsedGroups : []);
+
+        // ✅ Load current user's schedule
+        const me =
+          membersData.find(
+            (m) =>
+              m.userid?.toLowerCase() === currentUser?.toLowerCase() ||
+              m.profileName?.toLowerCase() === profileName?.toLowerCase()
+          ) || null;
+
         if (me) {
           const scheduleData = await fetchSchedule(me.userid);
           setMySchedule(scheduleData);
@@ -110,7 +112,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }, [currentUser]);
 
   /* =========================================================
-     🔗 Chat ID Helper
+     🧩 Chat key helper
   ========================================================= */
   const getChatKey = (type, id, otherUser) =>
     type === "group"
@@ -120,7 +122,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
           .join("#")}`;
 
   /* =========================================================
-     🔢 Unread Counts
+     🔢 Unread count loader
   ========================================================= */
   async function loadUnreadCounts() {
     if (!currentUser) return;
@@ -145,7 +147,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }, [currentUser]);
 
   /* =========================================================
-     ✅ markRead helper
+     ✅ Mark chat as read
   ========================================================= */
   async function markRead(chatKey) {
     try {
@@ -169,9 +171,8 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       const raw = await res.json();
       const data = typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
 
-      let resultSchedule;
       if (data?.success && data.schedule) {
-        resultSchedule = {
+        const result = {
           start: data.schedule.start || "09:00",
           end: data.schedule.end || "17:00",
           days:
@@ -179,18 +180,16 @@ export default function Sidebar({ onSelectUser, currentUser }) {
               ? data.schedule.days
               : ["Mon", "Tue", "Wed", "Thu", "Fri"],
         };
-      } else {
-        resultSchedule = { start: "09:00", end: "17:00", days: ["Mon", "Tue", "Wed", "Thu", "Fri"] };
+        setSchedule(result);
+        return result;
       }
-
-      setSchedule(resultSchedule);
-      return resultSchedule;
     } catch (err) {
       console.error("❌ Failed to load schedule:", err);
-      const fallback = { start: "09:00", end: "17:00", days: ["Mon", "Tue", "Wed", "Thu", "Fri"] };
-      setSchedule(fallback);
-      return fallback;
     }
+
+    const fallback = { start: "09:00", end: "17:00", days: ["Mon", "Tue", "Wed", "Thu", "Fri"] };
+    setSchedule(fallback);
+    return fallback;
   }
 
   async function saveSchedule() {
@@ -228,7 +227,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }
 
   /* =========================================================
-     🧭 Filter Members
+     🔍 Filter Members
   ========================================================= */
   const filteredMembers = members.filter((m) => {
     const pname = (m.profileName || "").toLowerCase();
@@ -239,7 +238,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   });
 
   /* =========================================================
-     🧱 Render
+     🧱 Render UI
   ========================================================= */
   return (
     <aside className="fixed top-0 left-0 bottom-0 w-[320px] bg-white border-r border-slate-200 flex flex-col z-20">
@@ -373,8 +372,131 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         )}
       </div>
 
-      {/* Footer - Logged in user */}
-      {/* (unchanged, omitted for brevity) */}
+      {/* Footer */}
+      <div className="border-t border-slate-200 p-3 bg-gray-50">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Avatar name={profileName} size={2.4} />
+            <div>
+              <div className="text-sm font-semibold text-gray-800">
+                {profileName}
+              </div>
+              <div className="flex items-center gap-1 text-xs">
+                <span
+                  className={`inline-block w-2 h-2 rounded-full ${
+                    isSelfActive ? "bg-green-500" : "bg-red-500"
+                  }`}
+                ></span>
+                {isSelfActive ? "Active Now" : "Offline"}
+              </div>
+            </div>
+          </div>
+          <button
+            className="text-gray-600 hover:text-blue-600 transition"
+            title="Manage your working hours"
+            onClick={() => {
+              const me = members.find(
+                (m) =>
+                  m.userid?.toLowerCase() === currentUser?.toLowerCase() ||
+                  m.profileName?.toLowerCase() === profileName?.toLowerCase()
+              );
+              if (me) {
+                setSelectedMember(me);
+                fetchSchedule(me.userid);
+                setShowScheduleModal(true);
+              } else {
+                alert("⚠️ Could not find your member record.");
+              }
+            }}
+          >
+            <Clock size={18} />
+          </button>
+        </div>
+      </div>
+
+      {/* 🕒 Schedule Modal */}
+      {showScheduleModal && selectedMember && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-[420px] p-5 relative">
+            <button
+              onClick={() => setShowScheduleModal(false)}
+              className="absolute top-3 right-3 text-gray-500 hover:text-red-500"
+            >
+              <X size={18} />
+            </button>
+            <h3 className="text-lg font-semibold mb-3">
+              Working Hours — {selectedMember.profileName}
+            </h3>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="text-sm font-medium text-gray-700">
+                  Start Time:
+                </label>
+                <input
+                  type="time"
+                  value={schedule.start}
+                  onChange={(e) =>
+                    setSchedule({ ...schedule, start: e.target.value })
+                  }
+                  className="w-full border px-2 py-1 rounded-md text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">
+                  End Time:
+                </label>
+                <input
+                  type="time"
+                  value={schedule.end}
+                  onChange={(e) =>
+                    setSchedule({ ...schedule, end: e.target.value })
+                  }
+                  className="w-full border px-2 py-1 rounded-md text-sm"
+                />
+              </div>
+            </div>
+            <label className="text-sm font-medium text-gray-700">Days:</label>
+            <div className="grid grid-cols-3 gap-2 my-2">
+              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
+                <label key={day} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={schedule.days.includes(day)}
+                    onChange={(e) =>
+                      setSchedule((prev) => ({
+                        ...prev,
+                        days: e.target.checked
+                          ? [...prev.days, day]
+                          : prev.days.filter((d) => d !== day),
+                      }))
+                    }
+                  />
+                  {day}
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end mt-4 gap-2">
+              <button
+                onClick={() => setShowScheduleModal(false)}
+                className="bg-gray-300 text-gray-800 text-sm px-3 py-2 rounded-md hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveSchedule}
+                disabled={loading}
+                className={`${
+                  loading
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                } text-white text-sm px-3 py-2 rounded-md`}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
