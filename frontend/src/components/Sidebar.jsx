@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getMembers, API_BASE } from "../lib/api";
 import { Avatar } from "./Avatar";
-import { LogOut, Users, X, Clock } from "lucide-react";
+import { LogOut, Users, X, Clock, Plus } from "lucide-react";
 import { useTabNotification } from "../hooks/useTabNotification";
 
 export default function Sidebar({ onSelectUser, currentUser }) {
@@ -10,6 +10,9 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   const [activeChat, setActiveChat] = useState(null);
   const [unreadMap, setUnreadMap] = useState({});
   const [search, setSearch] = useState("");
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [selectedMembers, setSelectedMembers] = useState([]);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
   const [schedule, setSchedule] = useState({
@@ -22,8 +25,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   const [loading, setLoading] = useState(false);
 
   const profileName = localStorage.getItem("profileName") || currentUser;
-
-  // 🔔 Blue-dot favicon
   const totalUnread = Object.values(unreadMap || {}).reduce((a, b) => a + b, 0);
   useTabNotification(totalUnread);
 
@@ -82,7 +83,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         const membersData = data?.members || data?.Items || [];
         setMembers(membersData);
 
-        // ✅ FIXED: remove username query param (caused 400)
+        // ✅ Fixed: now works even without username
         const groupRes = await fetch(`${API_BASE}/groups`);
         const groupRaw = await groupRes.json();
         const groupData =
@@ -91,7 +92,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         const parsedGroups = groupData?.groups || groupData?.Items || [];
         setGroups(Array.isArray(parsedGroups) ? parsedGroups : []);
 
-        // ✅ Load current user's schedule
         const me =
           membersData.find(
             (m) =>
@@ -163,66 +163,37 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }
 
   /* =========================================================
-     🕒 Schedule Management
+     ➕ Create Group
   ========================================================= */
-  async function fetchSchedule(userid) {
-    try {
-      const res = await fetch(`${API_BASE}/work-schedule?username=${userid}`);
-      const raw = await res.json();
-      const data = typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
-
-      if (data?.success && data.schedule) {
-        const result = {
-          start: data.schedule.start || "09:00",
-          end: data.schedule.end || "17:00",
-          days:
-            Array.isArray(data.schedule.days) && data.schedule.days.length > 0
-              ? data.schedule.days
-              : ["Mon", "Tue", "Wed", "Thu", "Fri"],
-        };
-        setSchedule(result);
-        return result;
-      }
-    } catch (err) {
-      console.error("❌ Failed to load schedule:", err);
-    }
-
-    const fallback = { start: "09:00", end: "17:00", days: ["Mon", "Tue", "Wed", "Thu", "Fri"] };
-    setSchedule(fallback);
-    return fallback;
-  }
-
-  async function saveSchedule() {
-    if (!selectedMember?.userid) {
-      alert("⚠️ Missing user ID for schedule save.");
+  async function handleCreateGroup() {
+    if (!newGroupName.trim() || selectedMembers.length === 0) {
+      alert("⚠️ Enter a group name and select members");
       return;
     }
     try {
-      setLoading(true);
-      const res = await fetch(`${API_BASE}/work-schedule`, {
-        method: "PUT",
+      const payload = {
+        groupName: newGroupName.trim(),
+        creator: currentUser,
+        members: selectedMembers,
+      };
+      const res = await fetch(`${API_BASE}/groups`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userid: selectedMember.userid,
-          workSchedule: schedule,
-        }),
+        body: JSON.stringify(payload),
       });
       const result = await res.json();
       const data = typeof result?.body === "string" ? JSON.parse(result.body) : result;
 
-      if (data?.success) {
-        alert("✅ Schedule saved successfully!");
-        setMySchedule(schedule);
-        setIsSelfActive(checkIfSelfActive(schedule));
+      if (data.success) {
+        alert("✅ Group created successfully");
+        setShowCreateGroup(false);
+        setGroups((prev) => [...prev, data.group]);
       } else {
-        alert("⚠️ Saved, but no confirmation from API.");
+        alert("❌ Failed to create group");
       }
-      setShowScheduleModal(false);
     } catch (err) {
-      alert("❌ Failed to save schedule");
-      console.error(err);
-    } finally {
-      setLoading(false);
+      console.error("❌ Error creating group:", err);
+      alert("❌ Error creating group");
     }
   }
 
@@ -279,9 +250,17 @@ export default function Sidebar({ onSelectUser, currentUser }) {
 
       {/* Groups */}
       <div className="p-3 border-b overflow-y-auto">
-        <h2 className="font-semibold text-slate-600 text-sm mb-2 flex items-center gap-2">
-          <Users size={14} /> Groups
-        </h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-semibold text-slate-600 text-sm flex items-center gap-2">
+            <Users size={14} /> Groups
+          </h2>
+          <button
+            onClick={() => setShowCreateGroup(true)}
+            className="bg-blue-500 text-white text-xs px-2 py-1 rounded hover:bg-blue-600 transition"
+          >
+            <Plus size={12} />
+          </button>
+        </div>
         {groups.length ? (
           groups.map((g) => {
             const chatKey = getChatKey("group", g.groupid);
@@ -295,7 +274,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                   onSelectUser({
                     type: "group",
                     id: g.groupid,
-                    name: g.groupname,
+                    name: g.groupname || g.groupName,
                   });
                 }}
                 className={`flex items-center justify-between w-full py-2 px-3 rounded-md text-sm transition ${
@@ -304,7 +283,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                     : "hover:bg-gray-50"
                 }`}
               >
-                <span>{g.groupname}</span>
+                <span>{g.groupname || g.groupName}</span>
                 {unread > 0 && (
                   <span className="bg-blue-500 text-white text-xs font-semibold rounded-full px-2 py-0.5">
                     {unread}
@@ -372,7 +351,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         )}
       </div>
 
-      {/* Footer */}
+      {/* Footer + Time Management */}
       <div className="border-t border-slate-200 p-3 bg-gray-50">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -414,84 +393,54 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         </div>
       </div>
 
-      {/* 🕒 Schedule Modal */}
-      {showScheduleModal && selectedMember && (
+      {/* 🆕 Create Group Modal */}
+      {showCreateGroup && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-[420px] p-5 relative">
             <button
-              onClick={() => setShowScheduleModal(false)}
+              onClick={() => setShowCreateGroup(false)}
               className="absolute top-3 right-3 text-gray-500 hover:text-red-500"
             >
               <X size={18} />
             </button>
-            <h3 className="text-lg font-semibold mb-3">
-              Working Hours — {selectedMember.profileName}
-            </h3>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Start Time:
-                </label>
-                <input
-                  type="time"
-                  value={schedule.start}
-                  onChange={(e) =>
-                    setSchedule({ ...schedule, start: e.target.value })
-                  }
-                  className="w-full border px-2 py-1 rounded-md text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  End Time:
-                </label>
-                <input
-                  type="time"
-                  value={schedule.end}
-                  onChange={(e) =>
-                    setSchedule({ ...schedule, end: e.target.value })
-                  }
-                  className="w-full border px-2 py-1 rounded-md text-sm"
-                />
-              </div>
-            </div>
-            <label className="text-sm font-medium text-gray-700">Days:</label>
-            <div className="grid grid-cols-3 gap-2 my-2">
-              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-                <label key={day} className="flex items-center gap-2 text-sm">
+            <h3 className="text-lg font-semibold mb-3">Create New Group</h3>
+            <input
+              type="text"
+              placeholder="Group Name"
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              className="border w-full rounded-md px-3 py-2 text-sm mb-3"
+            />
+            <label className="text-sm font-medium text-gray-700">Select Members:</label>
+            <div className="h-40 overflow-y-auto border rounded-md p-2 mt-1">
+              {members.map((m) => (
+                <label key={m.userid} className="flex items-center gap-2 text-sm py-1">
                   <input
                     type="checkbox"
-                    checked={schedule.days.includes(day)}
-                    onChange={(e) =>
-                      setSchedule((prev) => ({
-                        ...prev,
-                        days: e.target.checked
-                          ? [...prev.days, day]
-                          : prev.days.filter((d) => d !== day),
-                      }))
-                    }
+                    checked={selectedMembers.includes(m.userid)}
+                    onChange={(e) => {
+                      if (e.target.checked)
+                        setSelectedMembers([...selectedMembers, m.userid]);
+                      else
+                        setSelectedMembers(selectedMembers.filter((id) => id !== m.userid));
+                    }}
                   />
-                  {day}
+                  {m.profileName}
                 </label>
               ))}
             </div>
-            <div className="flex justify-end mt-4 gap-2">
+            <div className="flex justify-end gap-2 mt-4">
               <button
-                onClick={() => setShowScheduleModal(false)}
+                onClick={() => setShowCreateGroup(false)}
                 className="bg-gray-300 text-gray-800 text-sm px-3 py-2 rounded-md hover:bg-gray-400"
               >
                 Cancel
               </button>
               <button
-                onClick={saveSchedule}
-                disabled={loading}
-                className={`${
-                  loading
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-700"
-                } text-white text-sm px-3 py-2 rounded-md`}
+                onClick={handleCreateGroup}
+                className="bg-blue-600 text-white text-sm px-3 py-2 rounded-md hover:bg-blue-700"
               >
-                Save
+                Create
               </button>
             </div>
           </div>
