@@ -84,6 +84,45 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     }
     loadData();
   }, [currentUser]);
+/* =========================================================
+   🕒 Save Schedule
+========================================================= */
+async function saveSchedule() {
+  if (!selectedMember?.userid) {
+    alert("⚠️ Missing user ID for schedule save.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    const res = await fetch(`${API_BASE}/work-schedule`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userid: selectedMember.userid,
+        workSchedule: schedule,
+      }),
+    });
+
+    const result = await res.json();
+    const data = typeof result?.body === "string" ? JSON.parse(result.body) : result;
+
+    if (data?.success) {
+      alert("✅ Schedule saved successfully!");
+      setMySchedule(schedule);
+      setIsSelfActive(checkIfSelfActive(schedule));
+      setShowScheduleModal(false);
+    } else {
+      alert("⚠️ Saved, but no confirmation from API.");
+    }
+  } catch (err) {
+    alert("❌ Failed to save schedule");
+    console.error(err);
+  } finally {
+    setLoading(false);
+  }
+}
 
   /* =========================================================
      🧠 Helpers
