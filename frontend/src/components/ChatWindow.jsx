@@ -38,11 +38,12 @@ export default function ChatWindow({ activeUser, currentUser }) {
   /* ----------------------------------------------------
      🧩 Normalize Chat ID — consistent with backend
   ---------------------------------------------------- */
-  function normalizeChatId(userA, userB) {
-    if (!userA || !userB) return null;
-    const sorted = [userA, userB].map((x) => x.toLowerCase()).sort();
-    return `CHAT#${sorted[0]}#${sorted[1]}`;
-  }
+  if (activeUser.type === "user") {
+  const userB = activeUser.username || activeUser.id;
+  const chatId = normalizeChatId(currentUser, userB);
+  url = `/messages?chatId=${encodeURIComponent(chatId)}`;
+}
+
 
   /* ----------------------------------------------------
      🔗 Get Signed URL for downloads
@@ -103,9 +104,9 @@ export default function ChatWindow({ activeUser, currentUser }) {
     if (!activeUser || !currentUser) return;
     try {
       const chatid =
-        activeUser.type === "group"
-          ? `GROUP#${activeUser.id}`
-          : normalizeChatId(currentUser, activeUser.username);
+  activeUser.type === "group"
+    ? `GROUP#${activeUser.id}`
+    : normalizeChatId(currentUser, activeUser.username || activeUser.id);
 
       await postJSON("/messages/mark-read", { chatid, username: currentUser });
       setLastReadTimestamp(new Date().toISOString());
@@ -178,8 +179,10 @@ export default function ChatWindow({ activeUser, currentUser }) {
     }
 
     if (activeUser?.type === "user") {
-      payload.chatId = normalizeChatId(currentUser, activeUser.username);
-    }
+  const userB = activeUser.username || activeUser.id;
+  payload.chatId = normalizeChatId(currentUser, userB);
+}
+
 
     try {
       setUploading(true);
