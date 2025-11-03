@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — clean (no sound/notification logic)
+   💬 ChatWindow — clean + consistent CHAT# normalization
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
@@ -36,6 +36,15 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const currentProfileName = localStorage.getItem("profileName") || currentUser;
 
   /* ----------------------------------------------------
+     🧩 Normalize Chat ID — consistent with backend
+  ---------------------------------------------------- */
+  function normalizeChatId(userA, userB) {
+    if (!userA || !userB) return null;
+    const sorted = [userA, userB].map((x) => x.toLowerCase()).sort();
+    return `CHAT#${sorted[0]}#${sorted[1]}`;
+  }
+
+  /* ----------------------------------------------------
      🔗 Get Signed URL for downloads
   ---------------------------------------------------- */
   async function getSignedUrl(fileKey) {
@@ -54,38 +63,29 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
-     🧩 Normalize Chat ID
-  ---------------------------------------------------- */
-  function getChatId(userA, userB) {
-    const sorted = [userA, userB].sort((a, b) =>
-      a.toLowerCase().localeCompare(b.toLowerCase())
-    );
-    return `CHAT#${sorted[0]}#${sorted[1]}`;
-  }
-
-  /* ----------------------------------------------------
      LOAD MESSAGES
   ---------------------------------------------------- */
   async function loadMessages() {
     if (!activeUser || !currentUser) return;
+
     try {
       let url = "";
       if (activeUser.type === "group") {
-        url = `/messages?groupid=${encodeURIComponent(
-          activeUser.id
-        )}&username=${encodeURIComponent(currentUser)}`;
+        url = `/messages?groupid=${encodeURIComponent(activeUser.id)}`;
       } else if (activeUser.type === "user") {
-        const chatId = getChatId(currentUser, activeUser.id);
-        url = `/messages?chatId=${encodeURIComponent(
-          chatId
-        )}&username=${encodeURIComponent(currentUser)}`;
+        const chatId = normalizeChatId(currentUser, activeUser.username);
+        url = `/messages?chatId=${encodeURIComponent(chatId)}`;
       }
 
       const res = await getJSON(url);
-      const msgs = res?.messages || [];
-      setMessages(msgs);
+      if (res?.success && Array.isArray(res.messages)) {
+        setMessages(res.messages);
+      } else {
+        console.warn("⚠️ Failed to load messages:", res);
+        setMessages([]);
+      }
     } catch (err) {
-      console.error("❌ Failed to load messages:", err);
+      console.error("❌ Error loading messages:", err);
     }
   }
 
@@ -105,7 +105,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       const chatid =
         activeUser.type === "group"
           ? `GROUP#${activeUser.id}`
-          : getChatId(currentUser, activeUser.id);
+          : normalizeChatId(currentUser, activeUser.username);
 
       await postJSON("/messages/mark-read", { chatid, username: currentUser });
       setLastReadTimestamp(new Date().toISOString());
@@ -121,12 +121,25 @@ export default function ChatWindow({ activeUser, currentUser }) {
     setText(e.target.value);
     if (!isTyping) {
       setIsTyping(true);
-      postJSON("/typing/start", { user: currentUser, chat: activeUser });
+      postJSON("/typing/start", {
+        username: currentUser,
+        chatid:
+          activeUser.type === "group"
+            ? `GROUP#${activeUser.id}`
+            : normalizeChatId(currentUser, activeUser.username),
+      });
     }
+
     clearTimeout(typingTimer.current);
     typingTimer.current = setTimeout(() => {
       setIsTyping(false);
-      postJSON("/typing/stop", { user: currentUser, chat: activeUser });
+      postJSON("/typing/stop", {
+        username: currentUser,
+        chatid:
+          activeUser.type === "group"
+            ? `GROUP#${activeUser.id}`
+            : normalizeChatId(currentUser, activeUser.username),
+      });
     }, 2000);
   }
 
@@ -150,75 +163,43 @@ export default function ChatWindow({ activeUser, currentUser }) {
   ---------------------------------------------------- */
   async function sendMessage(e) {
     e.preventDefault();
-    if ((!text.trim() && !attachment) || !activeUser) return;
+    if (!text.trim() && !attachment) return;
+
+    const payload = {
+      sender: currentUser,
+      recipient: activeUser?.username || null,
+      groupid: activeUser?.type === "group" ? activeUser.id : null,
+      text: text.trim(),
+    };
+
+    if (attachment) {
+      payload.attachmentKey = attachment.key;
+      payload.attachmentType = attachment.type;
+    }
+
+    if (activeUser?.type === "user") {
+      payload.chatId = normalizeChatId(currentUser, activeUser.username);
+    }
 
     try {
       setUploading(true);
-      let fileKey = null;
-      let fileType = null;
-      let viewUrl = null;
-
-      if (attachment) {
-        const presign = await fetch(
-          `${import.meta.env.VITE_API_BASE}/presign-upload`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: attachment.name, type: attachment.type }),
-          }
-        );
-        const data = await presign.json();
-        if (!data?.uploadURL) throw new Error("Presign URL generation failed");
-
-        const uploadResp = await fetch(data.uploadURL, {
-          method: "PUT",
-          headers: { "Content-Type": attachment.type },
-          body: attachment,
-        });
-        if (!uploadResp.ok) {
-          const errText = await uploadResp.text();
-          throw new Error(`S3 upload failed: ${uploadResp.status} ${errText}`);
-        }
-
-        fileKey = data.fileKey;
-        fileType = attachment.type;
-        viewUrl = data.viewURL;
+      const res = await postJSON("/messages", payload);
+      if (res.success) {
+        setMessages((prev) => [...prev, res.item]);
+        setText("");
+        setAttachment(null);
+        await markAsRead(); // immediately mark own message as read
       }
-
-      const payload =
-        activeUser.type === "group"
-          ? {
-              sender: currentUser,
-              groupid: activeUser.id,
-              text,
-              attachmentKey: fileKey,
-              attachmentType: fileType,
-              attachmentUrl: viewUrl,
-            }
-          : {
-              sender: currentUser,
-              recipient: activeUser.id,
-              text,
-              attachmentKey: fileKey,
-              attachmentType: fileType,
-              attachmentUrl: viewUrl,
-            };
-
-      await postJSON("/messages", payload);
-      setText("");
-      setAttachment(null);
-      setShowEmojiPicker(false);
-      await loadMessages();
-      await markAsRead();
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     } catch (err) {
-      console.error("❌ Failed to send message:", err);
-      alert("Message send failed: " + err.message);
+      console.error("❌ sendMessage error:", err);
     } finally {
       setUploading(false);
     }
   }
 
+  /* ----------------------------------------------------
+     RENDER
+  ---------------------------------------------------- */
   return (
     <div className="flex flex-col flex-1 h-screen ml-[320px] bg-slate-50 relative">
       {/* Header */}
@@ -277,6 +258,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       {activeUser && (
         <div className="sticky bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-inner px-6 py-3">
           <form onSubmit={sendMessage} className="flex items-center gap-3 relative">
+            {/* Attachment Button */}
             <input
               type="file"
               accept="image/*,video/*,application/pdf"
@@ -411,10 +393,13 @@ function MessageBubble({ msg, currentUser, currentProfileName, getSignedUrl }) {
   const senderName = isMine
     ? "You"
     : msg.senderProfileName || msg.sender?.split("@")[0] || msg.sender;
-  const time = new Date(msg.timestamp).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+      const time = new Date(msg.timestamp).toLocaleString([], {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
   const fileType = msg.attachmentType || "";
   const fileName = (msg.attachmentKey || msg.attachmentUrl || "").toLowerCase();

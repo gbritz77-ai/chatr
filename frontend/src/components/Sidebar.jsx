@@ -40,6 +40,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   const totalUnread = Object.values(unreadMap || {}).reduce((a, b) => a + b, 0);
   useTabNotification(totalUnread);
 
+  
   /* =========================================================
      Load Members & Groups
   ========================================================= */
