@@ -169,41 +169,71 @@ export default function ChatWindow({ activeUser, currentUser }) {
      SEND MESSAGE
   ---------------------------------------------------- */
   async function sendMessage(e) {
-    e.preventDefault();
-    if (!text.trim() && !attachment) return;
+  e.preventDefault();
+  if (!text.trim() && !attachment) return;
 
-    const payload = {
-      sender: currentUser,
-      recipient: activeUser?.username || null,
-      groupid: activeUser?.type === "group" ? activeUser.id : null,
-      text: text.trim(),
-    };
+  const payload = {
+    sender: currentUser,
+    recipient: activeUser?.username || null,
+    groupid: activeUser?.type === "group" ? activeUser.id : null,
+    text: text.trim(),
+  };
 
-    if (attachment) {
-      payload.attachmentKey = attachment.key;
+  try {
+    setUploading(true);
+
+    // 🔹 Handle attachment upload first
+    if (attachment && attachment instanceof File) {
+      // 1️⃣ Request presigned upload URL
+      const uploadRes = await fetch(`${import.meta.env.VITE_API_BASE}/presign-upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: attachment.name,
+          fileType: attachment.type,
+        }),
+      });
+
+      const uploadData = await uploadRes.json();
+      if (!uploadData?.uploadURL || !uploadData?.fileKey) {
+        throw new Error("Failed to get presigned upload URL");
+      }
+
+      // 2️⃣ Upload the file to S3
+      await fetch(uploadData.uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": attachment.type },
+        body: attachment,
+      });
+
+      // 3️⃣ Attach metadata for backend
+      payload.attachmentKey = uploadData.fileKey;
       payload.attachmentType = attachment.type;
     }
 
+    // 🔹 Add chatId for 1-to-1 chats
     if (activeUser?.type === "user") {
       const userB = activeUser.username || activeUser.id;
       payload.chatId = normalizeChatId(currentUser, userB);
     }
 
-    try {
-      setUploading(true);
-      const res = await postJSON("/messages", payload);
-      if (res.success) {
-        setMessages((prev) => [...prev, res.item]);
-        setText("");
-        setAttachment(null);
-        await markAsRead();
-      }
-    } catch (err) {
-      console.error("❌ sendMessage error:", err);
-    } finally {
-      setUploading(false);
+    // 🔹 Send the message
+    const res = await postJSON("/messages", payload);
+    if (res.success) {
+      setMessages((prev) => [...prev, res.item]);
+      setText("");
+      setAttachment(null);
+      await markAsRead();
+    } else {
+      console.error("❌ Message send failed:", res);
     }
+  } catch (err) {
+    console.error("❌ sendMessage error:", err);
+  } finally {
+    setUploading(false);
   }
+}
+
 
   /* ----------------------------------------------------
      GUARD RENDER IF NO ACTIVE USER
