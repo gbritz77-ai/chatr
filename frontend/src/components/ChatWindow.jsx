@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { postJSON, getJSON } from "../lib/api";
-import data from "@emoji-mart/data";
-import Picker from "@emoji-mart/react";
+import data from 'emoji-mart/data'
+import Picker from 'emoji-mart/react'
 import { Avatar } from "../components/Avatar";
 import GifPicker from "../components/GifPicker";
 import {
