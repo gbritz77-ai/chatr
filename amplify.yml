@@ -11,12 +11,12 @@ frontend:
 
     build:
       commands:
-        # 🧱 Run the Vite build (uses vite.config.js in root)
+        # 🧱 Run the Vite build (uses vite.config.js in project root)
         - npm run build
 
   artifacts:
     # 📦 Tell Amplify where to find your compiled frontend
-    baseDirectory: src/dist
+    baseDirectory: frontend/dist
     files:
       - '**/*'
 
