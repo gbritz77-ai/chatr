@@ -23,6 +23,7 @@ provider:
   region: eu-west-2
   stage: dev
 
+  # ✅ No reserved AWS_REGION key here
   environment:
     JWT_SECRET: SuperSecretKey123!
     VITE_API_BASE: https://byu72oz79h.execute-api.eu-west-2.amazonaws.com/dev
@@ -81,12 +82,8 @@ provider:
 # ============================================================
 package:
   individually: true
+  excludeDevDependencies: true
   patterns:
-    - '!node_modules/@aws-sdk/**'
-    - '!node_modules/**/test/**'
-    - '!node_modules/**/docs/**'
-    - '!node_modules/**/examples/**'
-    - '!node_modules/**/samples/**'
     - '!**/.vscode/**'
     - '!**/.git/**'
     - '!**/dist/**'
@@ -98,31 +95,20 @@ package:
 # ============================================================
 # 🔧 Function Definitions
 # ============================================================
+# ============================================================
 functions:
-  # --- 🔐 Auth (Login) ---
+  # --- 🔐 Auth ---
   auth:
     handler: src/handlers/auth.handler
-    package:
-      patterns:
-        - src/handlers/auth.js
-        - node_modules/bcryptjs/**
-        - node_modules/jsonwebtoken/**
-        - node_modules/aws-sdk/**
     events:
       - http:
           path: auth
           method: post
           cors: true
 
-  # --- 🧩 Register ---
+  # --- 🧾 Register ---
   register:
     handler: src/handlers/register.handler
-    package:
-      patterns:
-        - src/handlers/register.js
-        - node_modules/bcryptjs/**
-        - node_modules/jsonwebtoken/**
-        - node_modules/aws-sdk/**
     events:
       - http:
           path: auth/register
@@ -142,7 +128,6 @@ functions:
   messages:
     handler: src/handlers/messages.handler
     events:
-      # Standard chat messages
       - http:
           path: messages
           method: any
@@ -150,18 +135,6 @@ functions:
       - http:
           path: messages/{proxy+}
           method: any
-          cors: true
-
-      # Fetch unread counts
-      - http:
-          path: messages/unread-counts
-          method: get
-          cors: true
-
-      # Mark chat as read
-      - http:
-          path: messages/mark-read
-          method: post
           cors: true
 
   # --- 👨‍👩‍👧 Groups ---
@@ -203,19 +176,6 @@ functions:
           method: post
           cors: true
 
-  # --- 📎 Get Attachment ---
-  getAttachment:
-    handler: src/handlers/getAttachment.handler
-    events:
-      - http:
-          path: attachments
-          method: get
-          cors: true
-          request:
-            parameters:
-              querystrings:
-                key: true
-
   # --- ✍️ Typing Indicators ---
   typing:
     handler: src/handlers/typing.handler
@@ -231,21 +191,4 @@ functions:
       - http:
           path: typing
           method: get
-          cors: true
-
-  # --- 🕒 Work Schedule Management ---
-  workSchedule:
-    handler: src/handlers/workSchedule.handler
-    package:
-      patterns:
-        - src/handlers/workSchedule.js
-        - node_modules/aws-sdk/**
-    events:
-      - http:
-          path: work-schedule
-          method: get
-          cors: true
-      - http:
-          path: work-schedule
-          method: put
           cors: true

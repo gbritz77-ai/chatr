@@ -1,12 +1,10 @@
+// src/handlers/presign-download.js
 const AWS = require("aws-sdk");
 
-AWS.config.update({ region: process.env.AWS_REGION || "eu-west-2" });
+AWS.config.update({ region: process.env.AWS_REGION });
 const s3 = new AWS.S3({ signatureVersion: "v4" });
 const BUCKET = process.env.ATTACHMENTS_BUCKET;
 
-/* ============================================================
-   🔧 Helper: Standardized HTTP Response
-============================================================ */
 const response = (statusCode, body) => ({
   statusCode,
   headers: {
@@ -18,48 +16,62 @@ const response = (statusCode, body) => ({
   body: JSON.stringify(body),
 });
 
-/* ============================================================
-   📦 Handler: Generate Presigned GET URL for Attachments
-============================================================ */
 exports.handler = async (event) => {
   console.log("📥 PRESIGN-DOWNLOAD EVENT:", JSON.stringify(event, null, 2));
 
-  try {
-    // Handle both JSON and already-parsed event bodies
-    const body =
-      typeof event.body === "string" ? JSON.parse(event.body || "{}") : event.body || {};
+  if (event.httpMethod === "OPTIONS") {
+    return response(200, { success: true, message: "CORS OK" });
+  }
 
-    const key = body.key || body.fileKey || null;
+  try {
+    const body = (() => {
+      try {
+        return JSON.parse(event.body || "{}");
+      } catch {
+        return {};
+      }
+    })();
+
+    const key = decodeURIComponent(body.key || body.fileKey || "").trim();
     if (!key) {
-      console.warn("⚠️ Missing key in request body.");
+      console.warn("⚠️ Missing 'key' or 'fileKey' in request body.");
       return response(400, { success: false, message: "Missing file key" });
     }
 
-    console.log(`🪣 Generating presigned download URL for ${BUCKET}/${key}`);
+    console.log(`🪣 Generating presigned URL for s3://${BUCKET}/${key}`);
 
-    // Generate presigned URL (GET)
+    // Check existence and get metadata
+    const head = await s3.headObject({ Bucket: BUCKET, Key: key }).promise();
+    const contentType = head.ContentType || "application/octet-stream";
+
+    const expiresIn = 3600 * 6; // 6 hours
+    const filename = key.split("/").pop();
+
     const params = {
       Bucket: BUCKET,
       Key: key,
-      Expires: 86400, // 24 hours
+      Expires: expiresIn,
       ResponseCacheControl: "no-cache",
-      ResponseContentDisposition: `inline; filename="${key.split("/").pop()}"`,
+      ResponseContentType: contentType,
+      ResponseContentDisposition: `inline; filename="${filename}"`,
     };
 
     const viewURL = await s3.getSignedUrlPromise("getObject", params);
 
-    console.log("✅ Presigned download URL generated successfully");
-    return response(200, {
-      success: true,
-      viewURL,
-      expiresIn: 86400,
-    });
+    console.log("✅ Presigned download URL generated.");
+    return response(200, { success: true, viewURL, expiresIn });
   } catch (err) {
     console.error("❌ PRESIGN-DOWNLOAD ERROR:", err);
-    return response(500, {
-      success: false,
-      message: "Failed to generate download URL",
-      error: err.message,
-    });
+
+    const safeMessage =
+      err.code === "NotFound"
+        ? "File not found in S3"
+        : err.code === "AccessDenied"
+        ? "Access denied to file"
+        : err.code === "CredentialsError"
+        ? "Server configuration issue (missing S3 credentials)"
+        : "Failed to generate download URL";
+
+    return response(500, { success: false, message: safeMessage });
   }
 };

@@ -64,9 +64,45 @@ exports.handler = async (event) => {
       if (!result.Item)
         return response(404, { success: false, message: "User not found" });
 
+      let schedule = result.Item.workSchedule || null;
+
+      // 🧠 Backward-compatibility: convert old format (start/end/days)
+      if (schedule && schedule.start && schedule.end && Array.isArray(schedule.days)) {
+        const newSched = {
+          Mon: { start: "09:00", end: "17:00", enabled: false },
+          Tue: { start: "09:00", end: "17:00", enabled: false },
+          Wed: { start: "09:00", end: "17:00", enabled: false },
+          Thu: { start: "09:00", end: "17:00", enabled: false },
+          Fri: { start: "09:00", end: "17:00", enabled: false },
+          Sat: { start: "", end: "", enabled: false },
+          Sun: { start: "", end: "", enabled: false },
+        };
+
+        schedule.days.forEach((day) => {
+          if (newSched[day]) {
+            newSched[day] = { start: schedule.start, end: schedule.end, enabled: true };
+          }
+        });
+
+        schedule = newSched;
+      }
+
+      // 🧩 Default fallback if user has no schedule yet
+      if (!schedule) {
+        schedule = {
+          Mon: { start: "09:00", end: "17:00", enabled: true },
+          Tue: { start: "09:00", end: "17:00", enabled: true },
+          Wed: { start: "09:00", end: "17:00", enabled: true },
+          Thu: { start: "09:00", end: "17:00", enabled: true },
+          Fri: { start: "09:00", end: "17:00", enabled: true },
+          Sat: { start: "", end: "", enabled: false },
+          Sun: { start: "", end: "", enabled: false },
+        };
+      }
+
       return response(200, {
         success: true,
-        schedule: result.Item.workSchedule || null,
+        schedule,
       });
     }
 
@@ -88,12 +124,24 @@ exports.handler = async (event) => {
           message: "You can only update your own schedule",
         });
 
+      // ✅ Sanitize schedule: ensure all 7 days exist
+      const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      const cleanSchedule = {};
+      for (const d of days) {
+        const v = workSchedule[d] || {};
+        cleanSchedule[d] = {
+          start: v.start || "",
+          end: v.end || "",
+          enabled: !!v.enabled,
+        };
+      }
+
       await dynamodb
         .update({
           TableName: TABLE_NAME,
           Key: { userid },
           UpdateExpression: "SET workSchedule = :ws",
-          ExpressionAttributeValues: { ":ws": workSchedule },
+          ExpressionAttributeValues: { ":ws": cleanSchedule },
         })
         .promise();
 

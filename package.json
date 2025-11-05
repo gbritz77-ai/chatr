@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "description": "Serverless backend for CHATr app",
   "main": "index.js",
+  "type": "module",
   "author": "Gerhard Britz",
   "license": "ISC",
   "scripts": {
-    "dev": "node --no-warnings ./node_modules/serverless/bin/serverless.js offline",
-    "deploy": "serverless deploy --stage dev --region eu-west-2",
-    "remove": "serverless remove --stage dev --region eu-west-2",
+    "dev": "npx serverless offline --stage dev --region eu-west-2",
+    "build": "npx vite build",
+    "deploy-backend": "node scripts/deploy-and-sync.js",
+    "deploy-frontend": "npm run build && aws s3 sync src/dist/ s3://outsec-chat-bucket --delete",
+    "deploy": "npm run deploy-backend && npm run deploy-frontend",
+    "remove": "npx serverless remove --stage dev --region eu-west-2",
     "amplify:build": "npm ci && npx amplify pull --yes --env dev --force",
     "test": "echo \"No tests yet\""
   },
@@ -23,13 +27,14 @@
   },
   "devDependencies": {
     "@aws-amplify/cli": "14.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
     "dotenv-cli": "^10.0.0",
+    "rollup": "^4.19.0",
     "serverless": "^3.40.0",
     "serverless-dotenv-plugin": "^6.0.0",
     "serverless-esbuild": "^1.55.1",
     "serverless-offline": "^13.6.0",
-    "vite": "^5.2.0",
-    "rollup": "^4.19.0"
+    "vite": "^5.2.0"
   },
   "repository": {
     "type": "git",

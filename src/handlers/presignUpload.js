@@ -2,11 +2,9 @@
 const AWS = require("aws-sdk");
 const crypto = require("crypto");
 
-AWS.config.update({ region: process.env.AWS_REGION || "eu-west-2" });
+AWS.config.update({ region: process.env.AWS_REGION });
 const s3 = new AWS.S3({ signatureVersion: "v4" });
-const dynamodb = new AWS.DynamoDB.DocumentClient();
 const BUCKET = process.env.ATTACHMENTS_BUCKET;
-const MESSAGES_TABLE = process.env.MESSAGES_TABLE;
 
 const response = (statusCode, body) => ({
   statusCode,
@@ -20,58 +18,51 @@ const response = (statusCode, body) => ({
 });
 
 module.exports.handler = async (event) => {
+  console.log("📦 PRESIGN UPLOAD EVENT:", JSON.stringify(event, null, 2));
+
   try {
-    const body = typeof event.body === "string" ? JSON.parse(event.body) : {};
-    let { name, type, sender, recipient, text } = body;
+    // Support both raw object and stringified body
+    const body =
+      typeof event.body === "string" ? JSON.parse(event.body) : event.body || {};
 
-    if (!name) return response(400, { success: false, message: "Missing file name" });
+    const { filename, contentType } = body;
 
-    const ext = name.split(".").pop().toLowerCase();
-    const mimeMap = {
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      gif: "image/gif",
-      webp: "image/webp",
-      pdf: "application/pdf",
-    };
-    type = mimeMap[ext] || type || "application/octet-stream";
-
-    const uniqueId = crypto.randomBytes(8).toString("hex");
-    const fileKey = `attachments/${Date.now()}-${uniqueId}-${name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-
-    const uploadURL = await s3.getSignedUrlPromise("putObject", {
-      Bucket: BUCKET,
-      Key: fileKey,
-      ContentType: type,
-      Expires: 300,
-    });
-
-    const viewURL = await s3.getSignedUrlPromise("getObject", {
-      Bucket: BUCKET,
-      Key: fileKey,
-      Expires: 86400,
-    });
-
-    // Optional: Save metadata to DynamoDB
-    if (sender && recipient) {
-      const messageItem = {
-        messageid: crypto.randomUUID(),
-        sender,
-        recipient,
-        text: text || "",
-        attachmentKey: fileKey,
-        attachmentType: type,
-        attachmentUrl: viewURL,
-        timestamp: new Date().toISOString(),
-        read: false,
-      };
-      await dynamodb.put({ TableName: MESSAGES_TABLE, Item: messageItem }).promise();
+    if (!filename || !contentType) {
+      return response(400, {
+        success: false,
+        message: "Missing filename or contentType",
+      });
     }
 
-    return response(200, { success: true, uploadURL, fileKey, viewURL, contentType: type });
+    // 🔹 Generate unique key safely
+    const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const uniqueId = crypto.randomBytes(8).toString("hex");
+    const key = `attachments/${Date.now()}-${uniqueId}-${safeName}`;
+
+    // 🔹 Create presigned PUT URL (for uploading)
+    const uploadURL = await s3.getSignedUrlPromise("putObject", {
+      Bucket: BUCKET,
+      Key: key,
+      ContentType: contentType,
+      Expires: 300, // 5 min
+    });
+
+    // (Optional) create presigned GET URL if you want immediate preview
+    const viewURL = await s3.getSignedUrlPromise("getObject", {
+      Bucket: BUCKET,
+      Key: key,
+      Expires: 86400, // 24 hours
+    });
+
+    return response(200, {
+      success: true,
+      uploadURL,
+      key,
+      viewURL,
+      contentType,
+    });
   } catch (err) {
-    console.error("❌ PRESIGN ERROR:", err);
+    console.error("❌ PRESIGN UPLOAD ERROR:", err);
     return response(500, { success: false, message: err.message });
   }
 };

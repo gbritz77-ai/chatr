@@ -28,20 +28,21 @@ exports.handler = async (event) => {
   const method = event.httpMethod || "GET";
   const params = event.queryStringParameters || {};
   let body = {};
+
   try {
     if (event.body) body = JSON.parse(event.body);
   } catch {
     return response(400, { success: false, message: "Invalid JSON body" });
   }
 
-  // ✅ CORS preflight
+  // ✅ Handle CORS preflight
   if (method === "OPTIONS") {
     return response(200, { message: "CORS preflight success" });
   }
 
   try {
     /* ============================================================
-       ➕ POST /groups — Create new group
+       ➕ POST /groups — Create a new group
     ============================================================= */
     if (method === "POST") {
       const { groupName, creator, members } = body;
@@ -57,7 +58,7 @@ exports.handler = async (event) => {
         groupid,
         groupName,
         creator,
-        members: Array.from(new Set([creator, ...members])), // ensure creator included
+        members: Array.from(new Set([creator, ...members])),
         createdAt: new Date().toISOString(),
       };
 
@@ -73,12 +74,10 @@ exports.handler = async (event) => {
     }
 
     /* ============================================================
-       📋 GET /groups?username=...
+       📋 GET /groups or /groups?username=<user>
     ============================================================= */
     if (method === "GET") {
-      const username = params.username;
-      if (!username)
-        return response(400, { success: false, message: "Missing username" });
+      const username = params.username || null;
 
       const result = await dynamodb
         .scan({
@@ -86,8 +85,35 @@ exports.handler = async (event) => {
         })
         .promise();
 
-      const groups = (result.Items || []).filter((g) =>
-        g.members?.includes(username)
+      // 🧩 Normalize & clean member arrays
+      let groups = (result.Items || []).map((g) => {
+        const rawMembers = g.members || [];
+        const normalizedMembers = Array.isArray(rawMembers)
+          ? rawMembers.map((m) => (m.S ? m.S : m))
+          : [];
+
+        return {
+          groupid: g.groupid,
+          groupname: g.groupName || g.groupname || "Unnamed Group",
+          creator: g.creator,
+          members: normalizedMembers,
+          createdAt: g.createdAt,
+        };
+      });
+
+      // If username provided → filter groups that include that member
+      if (username) {
+        groups = groups.filter((g) =>
+          (g.members || []).some(
+            (m) => m.toLowerCase() === username.toLowerCase()
+          )
+        );
+      }
+
+      console.log(
+        `✅ Returning ${groups.length} group(s) ${
+          username ? `for user: ${username}` : "(all groups)"
+        }`
       );
 
       return response(200, { success: true, groups });
@@ -99,7 +125,7 @@ exports.handler = async (event) => {
     if (method === "PUT" && event.path.includes("add")) {
       const { groupid, username } = body;
       if (!groupid || !username)
-        return response(400, { success: false, message: "Missing data" });
+        return response(400, { success: false, message: "Missing groupid or username" });
 
       const group = await dynamodb
         .get({ TableName: GROUPS_TABLE, Key: { groupid } })
@@ -108,7 +134,11 @@ exports.handler = async (event) => {
       if (!group.Item)
         return response(404, { success: false, message: "Group not found" });
 
-      const members = Array.from(new Set([...(group.Item.members || []), username]));
+      const oldMembers = Array.isArray(group.Item.members)
+        ? group.Item.members.map((m) => (m.S ? m.S : m))
+        : [];
+
+      const newMembers = Array.from(new Set([...oldMembers, username]));
 
       await dynamodb
         .update({
@@ -116,11 +146,12 @@ exports.handler = async (event) => {
           Key: { groupid },
           UpdateExpression: "set #m = :m",
           ExpressionAttributeNames: { "#m": "members" },
-          ExpressionAttributeValues: { ":m": members },
+          ExpressionAttributeValues: { ":m": newMembers },
         })
         .promise();
 
-      return response(200, { success: true, members });
+      console.log(`✅ Member added: ${username} → ${groupid}`);
+      return response(200, { success: true, members: newMembers });
     }
 
     /* ============================================================
@@ -129,7 +160,7 @@ exports.handler = async (event) => {
     if (method === "PUT" && event.path.includes("remove")) {
       const { groupid, username } = body;
       if (!groupid || !username)
-        return response(400, { success: false, message: "Missing data" });
+        return response(400, { success: false, message: "Missing groupid or username" });
 
       const group = await dynamodb
         .get({ TableName: GROUPS_TABLE, Key: { groupid } })
@@ -138,7 +169,13 @@ exports.handler = async (event) => {
       if (!group.Item)
         return response(404, { success: false, message: "Group not found" });
 
-      const members = (group.Item.members || []).filter((m) => m !== username);
+      const oldMembers = Array.isArray(group.Item.members)
+        ? group.Item.members.map((m) => (m.S ? m.S : m))
+        : [];
+
+      const newMembers = oldMembers.filter(
+        (m) => m.toLowerCase() !== username.toLowerCase()
+      );
 
       await dynamodb
         .update({
@@ -146,11 +183,12 @@ exports.handler = async (event) => {
           Key: { groupid },
           UpdateExpression: "set #m = :m",
           ExpressionAttributeNames: { "#m": "members" },
-          ExpressionAttributeValues: { ":m": members },
+          ExpressionAttributeValues: { ":m": newMembers },
         })
         .promise();
 
-      return response(200, { success: true, members });
+      console.log(`🧹 Member removed: ${username} from ${groupid}`);
+      return response(200, { success: true, members: newMembers });
     }
 
     /* ============================================================
@@ -168,9 +206,13 @@ exports.handler = async (event) => {
         })
         .promise();
 
+      console.log(`🗑️ Group deleted: ${groupid}`);
       return response(200, { success: true, message: "Group deleted" });
     }
 
+    /* ============================================================
+       🚫 Unsupported
+    ============================================================= */
     return response(405, { success: false, message: "Unsupported method" });
   } catch (err) {
     console.error("❌ GROUPS ERROR:", err);

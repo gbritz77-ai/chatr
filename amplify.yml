@@ -1,30 +1,17 @@
 version: 1
-applications:
-  - appRoot: frontend
-    frontend:
-      phases:
-        preBuild:
-          commands:
-            - echo "🧹 Cleaning previous install..."
-            - rm -rf node_modules package-lock.json
-            - echo "🧩 Installing Node.js 20.x..."
-            - nvm install 20
-            - nvm use 20
-            - echo "📦 Installing dependencies..."
-            - npm install -g npm@9
-            - npm install -g @aws-amplify/cli
-            - npm ci || npm install
-            # ✅ Fix Rollup native binary bug:
-            - echo "🔧 Rebuilding rollup native binary..."
-            - npm rebuild rollup --verbose
-        build:
-          commands:
-            - echo "🚀 Running Vite build..."
-            - npm run build
-      artifacts:
-        baseDirectory: dist
-        files:
-          - "**/*"
-      cache:
-        paths:
-          - node_modules/**/*
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    # This tells Amplify to find your build files in src/dist
+    baseDirectory: src/dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*

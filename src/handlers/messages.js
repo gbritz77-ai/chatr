@@ -23,12 +23,11 @@ const response = (statusCode, body) => ({
 });
 
 /* ============================================================
-   🔑 Chat ID Normalizer
+   🔑 Chat ID Builder (Uppercase CHAT#)
 ============================================================ */
 function getChatId(userA, userB) {
-  const sorted = [userA, userB].sort((a, b) =>
-    a.toLowerCase().localeCompare(b.toLowerCase())
-  );
+  if (!userA || !userB) return null;
+  const sorted = [userA, userB].map((x) => x.toLowerCase()).sort();
   return `CHAT#${sorted[0]}#${sorted[1]}`;
 }
 
@@ -56,9 +55,8 @@ exports.handler = async (event) => {
        🔢 GET /messages/unread-counts?username=...
     ============================================================= */
     if (method === "GET" && (event.path || "").includes("unread-counts")) {
-      const username = params.username;
-      if (!username)
-        return response(400, { success: false, message: "Missing username" });
+      const username = params.username?.toLowerCase();
+      if (!username) return response(400, { success: false, message: "Missing username" });
 
       console.log("📊 Calculating unread counts for:", username);
 
@@ -76,13 +74,11 @@ exports.handler = async (event) => {
       for (const item of readResult.Items || [])
         readMap[item.chatid] = new Date(item.lastReadAt);
 
-      // 2️⃣ Get messages involving user
+      // 2️⃣ Get messages involving this user
       const msgResult = await dynamodb
         .scan({
           TableName: TABLE_NAME,
-          FilterExpression:
-            "contains(#participants, :u) OR recipient = :u OR sender = :u",
-          ExpressionAttributeNames: { "#participants": "participants" },
+          FilterExpression: "sender = :u OR recipient = :u",
           ExpressionAttributeValues: { ":u": username },
         })
         .promise();
@@ -90,9 +86,8 @@ exports.handler = async (event) => {
       // 3️⃣ Count unread per chat
       const unreadMap = {};
       for (const msg of msgResult.Items || []) {
-        const chatid = msg.chatId || msg.groupid;
+        const chatid = msg.chatId || msg.chatid || msg.groupid;
         if (!chatid) continue;
-
         const sentAt = new Date(msg.timestamp || msg.createdAt || 0);
         const lastReadAt = readMap[chatid];
         if (!lastReadAt || sentAt > lastReadAt)
@@ -110,32 +105,36 @@ exports.handler = async (event) => {
       const chatIdParam = params.chatId || params.chatid;
       const groupIdParam = params.groupid;
 
+      // 🗨️ 1-on-1 chat
       if (chatIdParam) {
-        const chatId = decodeURIComponent(chatIdParam);
-        console.log("🧩 Scanning chat:", chatId);
+        const chatId = decodeURIComponent(chatIdParam).trim();
+        console.log("🧩 Fetching messages for chat:", chatId);
 
         const result = await dynamodb
           .scan({
             TableName: TABLE_NAME,
-            FilterExpression: "chatId = :chatId",
-            ExpressionAttributeValues: { ":chatId": chatId },
+            FilterExpression: "chatId = :cid OR chatid = :cid",
+            ExpressionAttributeValues: { ":cid": chatId },
           })
           .promise();
 
         const messages = (result.Items || []).sort(
           (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
         );
+
+        console.log(`✅ ${messages.length} messages found for ${chatId}`);
         return response(200, { success: true, messages });
       }
 
+      // 👥 Group chat
       if (groupIdParam) {
-        const groupId = decodeURIComponent(groupIdParam);
-        console.log("🧩 Scanning group:", groupId);
+        const groupId = decodeURIComponent(groupIdParam).trim();
+        console.log("🧩 Fetching messages for group:", groupId);
 
         const result = await dynamodb
           .scan({
             TableName: TABLE_NAME,
-            FilterExpression: "chatId = :gid",
+            FilterExpression: "groupid = :gid OR chatId = :gid",
             ExpressionAttributeValues: { ":gid": `GROUP#${groupId}` },
           })
           .promise();
@@ -143,6 +142,8 @@ exports.handler = async (event) => {
         const messages = (result.Items || []).sort(
           (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
         );
+
+        console.log(`✅ ${messages.length} messages found for group ${groupId}`);
         return response(200, { success: true, messages });
       }
 
@@ -153,11 +154,19 @@ exports.handler = async (event) => {
        ✉️ POST /messages → Send Message
     ============================================================= */
     if (method === "POST" && !(event.path || "").includes("mark-read")) {
-      const { sender, recipient, groupid, text, attachmentKey, attachmentType } =
-        body;
+      if (!body || typeof body !== "object")
+        return response(400, { success: false, message: "Invalid body" });
 
+      let { sender, recipient, groupid, text, attachmentKey, attachmentType } = body;
       if (!sender)
         return response(400, { success: false, message: "Missing sender" });
+      if (!recipient && !groupid)
+        return response(400, { success: false, message: "Missing recipient or groupid" });
+      if (recipient && sender.toLowerCase() === recipient.toLowerCase())
+        return response(400, { success: false, message: "Cannot send message to self" });
+
+      sender = sender.toLowerCase();
+      recipient = recipient ? recipient.toLowerCase() : null;
 
       const timestamp = new Date().toISOString();
       const messageid = crypto.randomUUID();
@@ -167,7 +176,7 @@ exports.handler = async (event) => {
         messageid,
         chatId,
         sender,
-        recipient: recipient || null,
+        recipient,
         text: text || "",
         timestamp,
         attachmentKey: attachmentKey || null,
@@ -175,8 +184,9 @@ exports.handler = async (event) => {
       };
 
       await dynamodb.put({ TableName: TABLE_NAME, Item: item }).promise();
+      console.log("✅ Message saved:", item);
 
-      // 🕓 Update sender's lastActive in members table
+      // 🕓 Update sender's lastActive
       try {
         await dynamodb
           .update({
@@ -187,7 +197,7 @@ exports.handler = async (event) => {
           })
           .promise();
       } catch (err) {
-        console.warn("⚠️ Failed to update lastActive:", err);
+        console.warn("⚠️ Failed to update lastActive:", err.code, err.message);
       }
 
       return response(200, { success: true, message: "Message sent", item });
@@ -196,33 +206,46 @@ exports.handler = async (event) => {
     /* ============================================================
        📬 POST /messages/mark-read
     ============================================================= */
+     /* ============================================================
+       📬 POST /messages/mark-read
+    ============================================================= */
     if (method === "POST" && (event.path || "").includes("mark-read")) {
-      const { chatid, username } = body;
-      if (!chatid || !username)
-        return response(400, { success: false, message: "Missing chatid or username" });
+      const { chatid, chatKey, username } = body;
+      const id = chatid || chatKey;
+      const user = (username || "").toLowerCase();
+
+      if (!id || !user)
+        return response(400, {
+          success: false,
+          message: "Missing chatid/chatKey or username",
+        });
+
+      // Ignore self-chat
+      const parts = id.split("#");
+      if (parts[1] && parts[2] && parts[1] === parts[2])
+        return response(200, { success: true, message: "Self-chat ignored" });
 
       const now = new Date().toISOString();
-      console.log("📨 Marking as read:", { chatid, username });
+      console.log("📨 Marking as read:", { chatid: id, username: user });
 
       await dynamodb
         .put({
           TableName: READ_TRACKING_TABLE,
-          Item: { chatid, username, read: true, lastReadAt: now },
+          Item: { chatid: id, username: user, read: true, lastReadAt: now },
         })
         .promise();
 
-      // 🕓 Update lastActive for reader too
       try {
         await dynamodb
           .update({
             TableName: MEMBERS_TABLE,
-            Key: { userid: username },
+            Key: { userid: user },
             UpdateExpression: "SET lastActive = :ts",
             ExpressionAttributeValues: { ":ts": now },
           })
           .promise();
       } catch (err) {
-        console.warn("⚠️ Failed to update lastActive on read:", err);
+        console.warn("⚠️ Failed to update lastActive on read:", err.code, err.message);
       }
 
       return response(200, { success: true, lastReadAt: now });

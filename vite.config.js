@@ -1,8 +1,11 @@
+// C:\Dev\Chatr\vite.config.js
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// https://vite.dev/config/
 export default defineConfig({
+  // 💡 Point root to the folder containing index.html
+  root: 'src', 
+
   plugins: [react()],
   server: {
     port: 5173,

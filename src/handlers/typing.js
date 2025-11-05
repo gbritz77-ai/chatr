@@ -16,10 +16,13 @@ const response = (statusCode, body) => ({
   body: JSON.stringify(body),
 });
 
+/* ======================================================
+   🧠 Main Handler
+====================================================== */
 exports.handler = async (event) => {
-  console.log("⌨️ Typing event:", JSON.stringify(event, null, 2));
+  console.log("⌨️ Typing Event:", JSON.stringify(event, null, 2));
   const method = event.httpMethod || "GET";
-  const path = event.path || "";
+  const path = (event.path || "").toLowerCase();
   let body = {};
 
   try {
@@ -35,12 +38,21 @@ exports.handler = async (event) => {
        🟢 POST /typing/start
     ====================================================== */
     if (method === "POST" && path.endsWith("/typing/start")) {
-      const { username, chatid } = body;
+      const usernameRaw = body.username || body.user || "";
+      const chatidRaw = body.chatid || body.chatId || body.chat || "";
+      const username = usernameRaw.toLowerCase();
+      const chatid = chatidRaw.toLowerCase();
+
       if (!username || !chatid)
-        return response(400, { success: false, message: "Missing fields" });
+        return response(400, { success: false, message: "Missing chatid or username" });
+
+      // 🧠 Ignore self-chat typing states like CHAT#user#user
+      const parts = chatid.split("#");
+      if (parts[1] && parts[1] === parts[2])
+        return response(200, { success: true, message: "Self-chat ignored" });
 
       const now = Date.now();
-      const ttlSeconds = 15; // ⏱ auto-expire after 15 s
+      const ttlSeconds = 15; // expires automatically after 15s
       const expiresAt = Math.floor(now / 1000) + ttlSeconds;
 
       await dynamodb
@@ -56,7 +68,7 @@ exports.handler = async (event) => {
         })
         .promise();
 
-      // Optional: mark user active
+      // Update member's lastActive time (optional)
       try {
         await dynamodb
           .update({
@@ -66,8 +78,8 @@ exports.handler = async (event) => {
             ExpressionAttributeValues: { ":ts": new Date(now).toISOString() },
           })
           .promise();
-      } catch (e) {
-        console.warn("⚠️ lastActive update failed:", e);
+      } catch (err) {
+        console.warn("⚠️ lastActive update failed:", err);
       }
 
       return response(200, { success: true, message: "Typing started" });
@@ -77,12 +89,19 @@ exports.handler = async (event) => {
        🔴 POST /typing/stop
     ====================================================== */
     if (method === "POST" && path.endsWith("/typing/stop")) {
-      const { username, chatid } = body;
+      const usernameRaw = body.username || body.user || "";
+      const chatidRaw = body.chatid || body.chatId || body.chat || "";
+      const username = usernameRaw.toLowerCase();
+      const chatid = chatidRaw.toLowerCase();
+
       if (!username || !chatid)
-        return response(400, { success: false, message: "Missing fields" });
+        return response(400, { success: false, message: "Missing chatid or username" });
 
       await dynamodb
-        .delete({ TableName: TABLE_NAME, Key: { chatid, username } })
+        .delete({
+          TableName: TABLE_NAME,
+          Key: { chatid, username },
+        })
         .promise();
 
       return response(200, { success: true, message: "Typing stopped" });
@@ -92,7 +111,9 @@ exports.handler = async (event) => {
        👀 GET /typing?chatid=...
     ====================================================== */
     if (method === "GET" && path.endsWith("/typing")) {
-      const chatid = event.queryStringParameters?.chatid;
+      const chatidRaw = event.queryStringParameters?.chatid || event.queryStringParameters?.chatId;
+      const chatid = (chatidRaw || "").toLowerCase();
+
       if (!chatid)
         return response(400, { success: false, message: "Missing chatid" });
 
@@ -110,6 +131,9 @@ exports.handler = async (event) => {
       return response(200, { success: true, usersTyping });
     }
 
+    /* ======================================================
+       🚫 Fallback
+    ====================================================== */
     return response(404, { success: false, message: "Invalid route" });
   } catch (err) {
     console.error("❌ Typing handler error:", err);
