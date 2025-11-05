@@ -1,14 +1,11 @@
-const success = (data) => ({
-  statusCode: 200,
-  body: JSON.stringify({ success: true, data }),
-});
-
-const failure = (err, statusCode = 400) => ({
+// src/utils/response.js
+export const response = (statusCode, body) => ({
   statusCode,
-  body: JSON.stringify({
-    success: false,
-    message: err.message || err.toString() || 'Error',
-  }),
+  headers: {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
+  },
+  body: JSON.stringify(body),
 });
-
-module.exports = { success, failure };

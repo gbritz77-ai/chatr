@@ -1,5 +1,5 @@
 service: chatr-service
-frameworkVersion: '3'
+frameworkVersion: "3"
 
 plugins:
   - serverless-dotenv-plugin
@@ -22,23 +22,40 @@ provider:
   runtime: nodejs20.x
   region: eu-west-2
   stage: dev
+  lambdaHashingVersion: 20201221
 
-  # ✅ No reserved AWS_REGION key here
+  # ✅ Environment Variables
   environment:
     JWT_SECRET: SuperSecretKey123!
-    VITE_API_BASE: https://byu72oz79h.execute-api.eu-west-2.amazonaws.com/dev
+    VITE_API_BASE: https://j6gnvmb4wf.execute-api.eu-west-2.amazonaws.com/dev
     MEMBERS_TABLE: chatr-members
     MESSAGES_TABLE: chatr-messages
     GROUPS_TABLE: chatr-groups
     READ_TRACKING_TABLE: chatr-read-tracking
     ATTACHMENTS_BUCKET: outsec-chat-bucket
     TYPING_TABLE: chatr-typing-status
-    AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
 
+  # ✅ Global HTTP API CORS
+  httpApi:
+    cors:
+      allowedOrigins:
+        - "*" # change to https://dev.d3rrkqgvvakfxn.amplifyapp.com once confirmed working
+      allowedHeaders:
+        - Content-Type
+        - Authorization
+      allowedMethods:
+        - OPTIONS
+        - GET
+        - POST
+        - PUT
+        - DELETE
+      allowCredentials: false
+
+  # ✅ IAM Permissions
   iam:
     role:
       statements:
-        # ✅ DynamoDB permissions
         - Effect: Allow
           Action:
             - dynamodb:Scan
@@ -54,7 +71,6 @@ provider:
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-typing-status
 
-        # ✅ S3 permissions
         - Effect: Allow
           Action:
             - s3:ListBucket
@@ -69,7 +85,6 @@ provider:
           Resource:
             - arn:aws:s3:::outsec-chat-bucket/*
 
-        # ✅ CloudWatch logs
         - Effect: Allow
           Action:
             - logs:CreateLogGroup
@@ -84,111 +99,96 @@ package:
   individually: true
   excludeDevDependencies: true
   patterns:
-    - '!**/.vscode/**'
-    - '!**/.git/**'
-    - '!**/dist/**'
-    - '!**/tmp/**'
-    - '!**/*.log'
-    - '!**/README.md'
-    - '!**/LICENSE*'
+    - "!**/.vscode/**"
+    - "!**/.git/**"
+    - "!**/dist/**"
+    - "!**/tmp/**"
+    - "!**/*.log"
+    - "!**/README.md"
+    - "!**/LICENSE*"
 
 # ============================================================
 # 🔧 Function Definitions
-# ============================================================
 # ============================================================
 functions:
   # --- 🔐 Auth ---
   auth:
     handler: src/handlers/auth.handler
     events:
-      - http:
-          path: auth
+      - httpApi:
+          path: /auth
           method: post
-          cors: true
 
   # --- 🧾 Register ---
   register:
     handler: src/handlers/register.handler
     events:
-      - http:
-          path: auth/register
+      - httpApi:
+          path: /auth/register
           method: post
-          cors: true
 
   # --- 👥 Members ---
   members:
     handler: src/handlers/members.handler
     events:
-      - http:
-          path: members
+      - httpApi:
+          path: /members
           method: any
-          cors: true
 
   # --- 💬 Messages ---
   messages:
     handler: src/handlers/messages.handler
     events:
-      - http:
-          path: messages
+      - httpApi:
+          path: /messages
           method: any
-          cors: true
-      - http:
-          path: messages/{proxy+}
+      - httpApi:
+          path: /messages/{proxy+}
           method: any
-          cors: true
 
   # --- 👨‍👩‍👧 Groups ---
   groups:
     handler: src/handlers/groups.handler
     events:
-      - http:
-          path: groups
+      - httpApi:
+          path: /groups
           method: any
-          cors: true
-      - http:
-          path: groups/add
+      - httpApi:
+          path: /groups/add
           method: put
-          cors: true
-      - http:
-          path: groups/remove
+      - httpApi:
+          path: /groups/remove
           method: put
-          cors: true
-      - http:
-          path: groups/delete
+      - httpApi:
+          path: /groups/delete
           method: delete
-          cors: true
 
   # --- 📤 Presigned Upload ---
   presignUpload:
     handler: src/handlers/presignUpload.handler
     events:
-      - http:
-          path: presign-upload
+      - httpApi:
+          path: /presign-upload
           method: post
-          cors: true
 
   # --- 📥 Presigned Download ---
   presignDownload:
     handler: src/handlers/presignDownload.handler
     events:
-      - http:
-          path: presign-download
+      - httpApi:
+          path: /presign-download
           method: post
-          cors: true
 
   # --- ✍️ Typing Indicators ---
   typing:
     handler: src/handlers/typing.handler
     events:
-      - http:
-          path: typing/start
+      - httpApi:
+          path: /typing/start
           method: post
-          cors: true
-      - http:
-          path: typing/stop
+      - httpApi:
+          path: /typing/stop
           method: post
-          cors: true
-      - http:
-          path: typing
+      - httpApi:
+          path: /typing
           method: get
-          cors: true
