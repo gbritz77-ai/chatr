@@ -4,10 +4,10 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 
 export default defineConfig({
-  // ✅ Correct root folder
-  root: "frontend/src",
+  // ✅ Root points to frontend (not frontend/src)
+  root: path.resolve(__dirname, "frontend"),
 
-  // ✅ Output build to frontend/dist (keeps structure clean)
+  // ✅ Output compiled files to frontend/dist
   build: {
     outDir: path.resolve(__dirname, "frontend/dist"),
     emptyOutDir: true,
@@ -25,6 +25,13 @@ export default defineConfig({
     open: true,
   },
 
-  // ✅ Ensures Amplify/S3 can load relative assets
+  // ✅ Ensures all assets resolve correctly on Amplify/S3
   base: "./",
+
+  // ✅ Optional aliases for cleaner imports
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "frontend/src"),
+    },
+  },
 });
