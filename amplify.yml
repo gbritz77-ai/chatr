@@ -15,8 +15,8 @@ frontend:
         - npm run build
 
   artifacts:
-    # 📦 Tell Amplify where to find your compiled frontend
-    baseDirectory: dist
+    # 📦 Correct build output folder for your structure
+    baseDirectory: frontend/dist
     files:
       - '**/*'
 
