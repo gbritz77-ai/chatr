@@ -44,7 +44,7 @@ export default function Login() {
         {/* Logo + Title */}
         <div className="flex flex-col items-center mb-6">
           <img
-            src="/logo/logo.JPG"
+            src="/logo.JPG"
             alt="CHATR Logo"
             className="w-48 h-25 object-cover mb-4"
           />
