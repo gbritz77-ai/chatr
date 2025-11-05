@@ -16,7 +16,7 @@ frontend:
 
   artifacts:
     # 📦 Tell Amplify where to find your compiled frontend
-    baseDirectory: frontend/dist
+    baseDirectory: dist
     files:
       - '**/*'
 
