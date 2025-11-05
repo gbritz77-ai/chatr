@@ -48,6 +48,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     async function loadData() {
       try {
         // members
+         // members
         const res = await getMembers();
         const parsed =
           typeof res === "string"
