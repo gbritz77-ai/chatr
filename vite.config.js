@@ -11,6 +11,7 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "frontend/dist"),
     emptyOutDir: true,
+    chunkSizeWarningLimit: 1500,
   },
 
   plugins: [react()],
