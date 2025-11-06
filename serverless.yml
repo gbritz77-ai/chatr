@@ -33,7 +33,7 @@ provider:
   # ✅ Environment variables (removed AWS_REGION to avoid reserved key error)
   environment:
     JWT_SECRET: SuperSecretKey123!
-    VITE_API_BASE: VITE_API_BASE=https://sud3788n42.execute-api.eu-west-2.amazonaws.com
+    VITE_API_BASE: https://sud3788n42.execute-api.eu-west-2.amazonaws.com
     MEMBERS_TABLE: chatr-members
     MESSAGES_TABLE: chatr-messages
     GROUPS_TABLE: chatr-groups
