@@ -1,26 +1,36 @@
 version: 1
-frontend:
-  phases:
-    preBuild:
-      commands:
-        # 🧹 Ensure a clean environment
-        - npm install --legacy-peer-deps
-        # Optional: show Node/NPM versions for debugging
-        - node -v
-        - npm -v
+applications:
+  - appRoot: frontend
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            # 🧹 Ensure clean install for all dependencies
+            - npm ci || npm install --legacy-peer-deps
 
-    build:
-      commands:
-        # 🧱 Run the Vite build (uses vite.config.js in project root)
-        - npm run build
+            # 🧠 Show environment info (optional for debugging)
+            - node -v
+            - npm -v
 
-  artifacts:
-    # 📦 Correct build output folder for your structure
-    baseDirectory: frontend/dist
-    files:
-      - '**/*'
+        build:
+          commands:
+            # ⚙️ Run the Vite production build
+            - npm run build
 
-  cache:
-    # ⚡ Cache node_modules for faster builds
-    paths:
-      - node_modules/**/*
+      artifacts:
+        # 📦 Output folder for Vite build
+        baseDirectory: dist
+        files:
+          - '**/*'
+
+      cache:
+        # ⚡ Cache dependencies for faster rebuilds
+        paths:
+          - node_modules/**/*
+
+    environment:
+      variables:
+        # 🌍 Environment variables available during build
+        VITE_API_BASE: https://n5dczw3bzj.execute-api.eu-west-2.amazonaws.com
+        VITE_GIPHY_API_KEY: N1ChWoOAZj7IhtH39lm75
+        NODE_ENV: production

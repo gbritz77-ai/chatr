@@ -5,9 +5,9 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  root: './frontend/src', // adjust if needed
+  root: "./frontend/src",
   build: {
-    outDir: '../dist',
+    outDir: "../dist",
     emptyOutDir: true,
   },
 });

@@ -30,9 +30,10 @@ provider:
       - "*/*"
     metrics: true
 
+  # ✅ Environment variables (removed AWS_REGION to avoid reserved key error)
   environment:
     JWT_SECRET: SuperSecretKey123!
-    VITE_API_BASE: https://xt2u005l04.execute-api.eu-west-2.amazonaws.com
+    VITE_API_BASE: https://n5dczw3bzj.execute-api.eu-west-2.amazonaws.com
     MEMBERS_TABLE: chatr-members
     MESSAGES_TABLE: chatr-messages
     GROUPS_TABLE: chatr-groups
@@ -44,7 +45,7 @@ provider:
   iam:
     role:
       statements:
-        # DynamoDB permissions
+        # ✅ DynamoDB permissions
         - Effect: Allow
           Action:
             - dynamodb:Scan
@@ -60,7 +61,7 @@ provider:
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-typing-status
 
-        # S3 permissions
+        # ✅ S3 permissions
         - Effect: Allow
           Action:
             - s3:ListBucket
@@ -72,7 +73,7 @@ provider:
             - s3:DeleteObject
           Resource: arn:aws:s3:::outsec-chat-bucket/*
 
-        # CloudWatch logs
+        # ✅ CloudWatch logs
         - Effect: Allow
           Action:
             - logs:CreateLogGroup
@@ -96,7 +97,7 @@ package:
     - "!**/LICENSE*"
 
 # ============================================================
-# 🔧 Function Definitions (all cors: true)
+# 🔧 Lambda Functions — Cleaned + CORS Safe
 # ============================================================
 functions:
   # --- 🔐 AUTH ---
@@ -106,11 +107,12 @@ functions:
       - http:
           path: auth
           method: post
-          cors: true
-      - http:
-          path: auth
-          method: options
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
 
   # --- 🧾 REGISTER ---
   register:
@@ -119,7 +121,12 @@ functions:
       - http:
           path: auth/register
           method: post
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
 
   # --- 👥 MEMBERS ---
   members:
@@ -128,7 +135,12 @@ functions:
       - http:
           path: members
           method: any
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
 
   # --- 💬 MESSAGES ---
   messages:
@@ -137,19 +149,21 @@ functions:
       - http:
           path: messages
           method: any
-          cors: true
-      - http:
-          path: messages/{proxy+}
-          method: any
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
       - http:
           path: messages/unread-counts
           method: get
-          cors: true
-      - http:
-          path: messages/unread-counts
-          method: options
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
 
   # --- 👨‍👩‍👧 GROUPS ---
   groups:
@@ -158,19 +172,39 @@ functions:
       - http:
           path: groups
           method: any
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
       - http:
           path: groups/add
           method: put
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
       - http:
           path: groups/remove
           method: put
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
       - http:
           path: groups/delete
           method: delete
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
 
   # --- 📤 PRESIGNED UPLOAD ---
   presignUpload:
@@ -179,7 +213,12 @@ functions:
       - http:
           path: presign-upload
           method: post
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
 
   # --- 📥 PRESIGNED DOWNLOAD ---
   presignDownload:
@@ -188,7 +227,12 @@ functions:
       - http:
           path: presign-download
           method: post
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
 
   # --- ✍️ TYPING INDICATORS ---
   typing:
@@ -197,12 +241,27 @@ functions:
       - http:
           path: typing/start
           method: post
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
       - http:
           path: typing/stop
           method: post
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
       - http:
           path: typing
           method: get
-          cors: true
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
