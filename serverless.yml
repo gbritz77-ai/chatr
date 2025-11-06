@@ -22,12 +22,17 @@ provider:
   runtime: nodejs20.x
   region: eu-west-2
   stage: dev
-  lambdaHashingVersion: 20201221
 
-  # ✅ Environment Variables
+  apiGateway:
+    shouldStartNameWithService: true
+    minimumCompressionSize: 1024
+    binaryMediaTypes:
+      - "*/*"
+    metrics: true
+
   environment:
     JWT_SECRET: SuperSecretKey123!
-    VITE_API_BASE: https://j6gnvmb4wf.execute-api.eu-west-2.amazonaws.com/dev
+    VITE_API_BASE: https://xt2u005l04.execute-api.eu-west-2.amazonaws.com
     MEMBERS_TABLE: chatr-members
     MESSAGES_TABLE: chatr-messages
     GROUPS_TABLE: chatr-groups
@@ -36,26 +41,10 @@ provider:
     TYPING_TABLE: chatr-typing-status
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
 
-  # ✅ Global HTTP API CORS
-  httpApi:
-    cors:
-      allowedOrigins:
-        - "*" # change to https://dev.d3rrkqgvvakfxn.amplifyapp.com once confirmed working
-      allowedHeaders:
-        - Content-Type
-        - Authorization
-      allowedMethods:
-        - OPTIONS
-        - GET
-        - POST
-        - PUT
-        - DELETE
-      allowCredentials: false
-
-  # ✅ IAM Permissions
   iam:
     role:
       statements:
+        # DynamoDB permissions
         - Effect: Allow
           Action:
             - dynamodb:Scan
@@ -71,20 +60,19 @@ provider:
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-typing-status
 
+        # S3 permissions
         - Effect: Allow
           Action:
             - s3:ListBucket
-          Resource:
-            - arn:aws:s3:::outsec-chat-bucket
-
+          Resource: arn:aws:s3:::outsec-chat-bucket
         - Effect: Allow
           Action:
             - s3:GetObject
             - s3:PutObject
             - s3:DeleteObject
-          Resource:
-            - arn:aws:s3:::outsec-chat-bucket/*
+          Resource: arn:aws:s3:::outsec-chat-bucket/*
 
+        # CloudWatch logs
         - Effect: Allow
           Action:
             - logs:CreateLogGroup
@@ -93,7 +81,7 @@ provider:
           Resource: arn:aws:logs:eu-west-2:*:log-group:*
 
 # ============================================================
-# 🧱 Packaging Optimization
+# 📦 Package optimization
 # ============================================================
 package:
   individually: true
@@ -108,87 +96,113 @@ package:
     - "!**/LICENSE*"
 
 # ============================================================
-# 🔧 Function Definitions
+# 🔧 Function Definitions (all cors: true)
 # ============================================================
 functions:
-  # --- 🔐 Auth ---
+  # --- 🔐 AUTH ---
   auth:
     handler: src/handlers/auth.handler
     events:
-      - httpApi:
-          path: /auth
+      - http:
+          path: auth
           method: post
+          cors: true
+      - http:
+          path: auth
+          method: options
+          cors: true
 
-  # --- 🧾 Register ---
+  # --- 🧾 REGISTER ---
   register:
     handler: src/handlers/register.handler
     events:
-      - httpApi:
-          path: /auth/register
+      - http:
+          path: auth/register
           method: post
+          cors: true
 
-  # --- 👥 Members ---
+  # --- 👥 MEMBERS ---
   members:
     handler: src/handlers/members.handler
     events:
-      - httpApi:
-          path: /members
+      - http:
+          path: members
           method: any
+          cors: true
 
-  # --- 💬 Messages ---
+  # --- 💬 MESSAGES ---
   messages:
     handler: src/handlers/messages.handler
     events:
-      - httpApi:
-          path: /messages
+      - http:
+          path: messages
           method: any
-      - httpApi:
-          path: /messages/{proxy+}
+          cors: true
+      - http:
+          path: messages/{proxy+}
           method: any
+          cors: true
+      - http:
+          path: messages/unread-counts
+          method: get
+          cors: true
+      - http:
+          path: messages/unread-counts
+          method: options
+          cors: true
 
-  # --- 👨‍👩‍👧 Groups ---
+  # --- 👨‍👩‍👧 GROUPS ---
   groups:
     handler: src/handlers/groups.handler
     events:
-      - httpApi:
-          path: /groups
+      - http:
+          path: groups
           method: any
-      - httpApi:
-          path: /groups/add
+          cors: true
+      - http:
+          path: groups/add
           method: put
-      - httpApi:
-          path: /groups/remove
+          cors: true
+      - http:
+          path: groups/remove
           method: put
-      - httpApi:
-          path: /groups/delete
+          cors: true
+      - http:
+          path: groups/delete
           method: delete
+          cors: true
 
-  # --- 📤 Presigned Upload ---
+  # --- 📤 PRESIGNED UPLOAD ---
   presignUpload:
     handler: src/handlers/presignUpload.handler
     events:
-      - httpApi:
-          path: /presign-upload
+      - http:
+          path: presign-upload
           method: post
+          cors: true
 
-  # --- 📥 Presigned Download ---
+  # --- 📥 PRESIGNED DOWNLOAD ---
   presignDownload:
     handler: src/handlers/presignDownload.handler
     events:
-      - httpApi:
-          path: /presign-download
+      - http:
+          path: presign-download
           method: post
+          cors: true
 
-  # --- ✍️ Typing Indicators ---
+  # --- ✍️ TYPING INDICATORS ---
   typing:
     handler: src/handlers/typing.handler
     events:
-      - httpApi:
-          path: /typing/start
+      - http:
+          path: typing/start
           method: post
-      - httpApi:
-          path: /typing/stop
+          cors: true
+      - http:
+          path: typing/stop
           method: post
-      - httpApi:
-          path: /typing
+          cors: true
+      - http:
+          path: typing
           method: get
+          cors: true

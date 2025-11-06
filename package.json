@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Serverless backend for CHATr app",
   "main": "index.js",
-  "type": "module",
+  "type": "commonjs",
   "author": "Gerhard Britz",
   "license": "ISC",
   "scripts": {

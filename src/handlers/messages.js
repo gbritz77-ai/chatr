@@ -4,7 +4,6 @@ const crypto = require("crypto");
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const TABLE_NAME = process.env.MESSAGES_TABLE;
-const GROUPS_TABLE = process.env.GROUPS_TABLE;
 
 /* ============================================================
    ✅ Shared Response Helper (CORS Safe)
@@ -26,13 +25,21 @@ const response = (statusCode, body) => ({
 exports.handler = async (event) => {
   console.log("📩 Event received:", JSON.stringify(event, null, 2));
 
-  try {
-    const method = event.httpMethod;
-    const params = event.queryStringParameters || {};
+  const method = event.httpMethod || "GET";
+  const path = event.path || "";
+  const params = event.queryStringParameters || {};
 
-    // =====================================================
-    // 📨 SEND MESSAGE
-    // =====================================================
+  try {
+    // ----------------------------------------------------------
+    // 🧠 Handle Preflight (CORS OPTIONS)
+    // ----------------------------------------------------------
+    if (method === "OPTIONS") {
+      return response(200, { success: true, message: "CORS preflight OK" });
+    }
+
+    // ----------------------------------------------------------
+    // 📨 POST: Send a new message
+    // ----------------------------------------------------------
     if (method === "POST") {
       const body = JSON.parse(event.body || "{}");
       const { sender, recipient, groupid, text, attachmentUrl } = body;
@@ -54,46 +61,28 @@ exports.handler = async (event) => {
         createdAt: timestamp,
       };
 
-      await dynamodb
-        .put({
-          TableName: TABLE_NAME,
-          Item: newItem,
-        })
-        .promise();
-
+      await dynamodb.put({ TableName: TABLE_NAME, Item: newItem }).promise();
       console.log("✅ Message saved:", newItem);
-
       return response(200, { success: true, message: newItem });
     }
 
-    // =====================================================
-    // 📬 FETCH UNREAD COUNTS (Frontend calls this often)
-    // =====================================================
-    if (method === "GET" && event.path.includes("unread-counts")) {
-      const { username } = params;
+    // ----------------------------------------------------------
+    // 📬 GET: Unread counts
+    // ----------------------------------------------------------
+    if (method === "GET" && path.endsWith("/unread-counts")) {
+      const username = params.username;
+      if (!username) return response(400, { success: false, message: "Missing username" });
 
-      if (!username)
-        return response(400, { success: false, message: "Missing username" });
+      console.log("🔍 Fetching unread counts for:", username);
 
-      // This is just a stub response. You can plug in your own logic.
-      const result = await dynamodb
-        .scan({
-          TableName: TABLE_NAME,
-          FilterExpression: "#recipient = :username",
-          ExpressionAttributeNames: { "#recipient": "recipient" },
-          ExpressionAttributeValues: { ":username": username },
-        })
-        .promise();
-
-      const unreadCount = result.Items ? result.Items.length : 0;
-      console.log("📊 Unread messages:", unreadCount);
-
-      return response(200, { success: true, unreadCount });
+      // Temporary dummy data
+      const unreadCount = 0;
+      return response(200, { success: true, username, unreadCount });
     }
 
-    // =====================================================
-    // 📬 DEFAULT GET
-    // =====================================================
+    // ----------------------------------------------------------
+    // 📚 GET: All messages (default)
+    // ----------------------------------------------------------
     if (method === "GET") {
       const result = await dynamodb.scan({ TableName: TABLE_NAME }).promise();
       return response(200, { success: true, items: result.Items });
