@@ -1,40 +1,45 @@
 // src/lib/api.js
+// ==========================================================
+// 🌍 Environment Detection & API Base Configuration
+// ==========================================================
 
-// ----------------------------------------------------------
-// 🌍 Environment Detection & Logging
-// ----------------------------------------------------------
+// Pull raw value from Vite env
+let rawBase = import.meta.env.VITE_API_BASE || "";
 
-let base = import.meta.env.VITE_API_BASE || "";
+// 🧹 Sanitize any accidental prefix (e.g., "VITE_API_BASE=https://...")
+let base = rawBase.replace(/^VITE_API_BASE=/, "").trim();
 
+// Environment detection
 const hostname = window.location.hostname;
 const isLocalHost = ["localhost", "127.0.0.1", "::1"].includes(hostname);
 
-console.groupCollapsed("🌍 [API CONFIG DEBUG]");
-console.log("• VITE_API_BASE from .env:", base);
-console.log("• Hostname:", hostname);
-console.log("• Local environment?", isLocalHost);
-console.groupEnd();
-
-// Auto-fallbacks
+// Auto-fallbacks if missing or empty
 if (!base) {
   if (isLocalHost) {
     base = "http://localhost:3000/dev";
     console.log("✅ Using local Serverless Offline:", base);
   } else {
-    base = "https://byu72oz79h.execute-api.eu-west-2.amazonaws.com/dev";
-    console.log("🌍 Using production AWS API Gateway:", base);
+    base = "https://sud3788n42.execute-api.eu-west-2.amazonaws.com/dev";
+    console.log("🌍 Using production AWS API Gateway fallback:", base);
   }
 } else {
   console.log("🧩 Using VITE_API_BASE override:", base);
 }
 
-// Final normalized base (no trailing slash)
+// Normalize (remove trailing slashes)
 export const API_BASE = base.replace(/\/+$/, "");
-console.log("🚀 Final API_BASE:", API_BASE);
 
-// ----------------------------------------------------------
-// 🧰 URL Builder (ensures exactly one slash)
-// ----------------------------------------------------------
+// Debug log
+console.groupCollapsed("🌍 [API CONFIG DEBUG]");
+console.log("• Hostname:", hostname);
+console.log("• Local environment?", isLocalHost);
+console.log("• Raw env:", rawBase);
+console.log("• Final API_BASE:", API_BASE);
+console.groupEnd();
+
+// ==========================================================
+// 🧰 URL Builder (ensures exactly one slash between base & path)
+// ==========================================================
 function buildUrl(path) {
   if (!path.startsWith("/")) path = `/${path}`;
   const url = `${API_BASE}${path}`.replace(/([^:]\/)\/+/g, "$1");
@@ -42,9 +47,9 @@ function buildUrl(path) {
   return url;
 }
 
-// ----------------------------------------------------------
+// ==========================================================
 // ✅ GET helper
-// ----------------------------------------------------------
+// ==========================================================
 export async function getJSON(path) {
   const url = buildUrl(path);
 
@@ -69,9 +74,9 @@ export async function getJSON(path) {
   }
 }
 
-// ----------------------------------------------------------
+// ==========================================================
 // ✅ POST helper
-// ----------------------------------------------------------
+// ==========================================================
 export async function postJSON(path, body) {
   const url = buildUrl(path);
 
@@ -97,9 +102,9 @@ export async function postJSON(path, body) {
   }
 }
 
-// ----------------------------------------------------------
+// ==========================================================
 // ✅ Example helper (members)
-// ----------------------------------------------------------
+// ==========================================================
 export async function getMembers() {
   return getJSON("/members");
 }
