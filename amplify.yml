@@ -5,32 +5,21 @@ applications:
       phases:
         preBuild:
           commands:
-            # 🧹 Clean and install dependencies
             - npm ci || npm install --legacy-peer-deps
-
-            # 🧠 Show versions (for debug logs)
             - node -v
             - npm -v
-
         build:
           commands:
-            # ⚙️ Run the Vite production build
             - npm run build
-
       artifacts:
-        # 📦 Correct build output path (relative to appRoot)
-        baseDirectory: ../dist
+        baseDirectory: dist
         files:
           - '**/*'
-
       cache:
-        # ⚡ Cache dependencies between builds
         paths:
           - node_modules/**/*
-
     environment:
       variables:
-        # 🌍 Environment variables available at build time
-        VITE_API_BASE: https://n5dczw3bzj.execute-api.eu-west-2.amazonaws.com/dev
-        VITE_GIPHY_API_KEY: N1ChWoOAZj7IhtH39lm75
+        VITE_API_BASE: https://n5dczw3bzj.execute-api.eu-west-2.amazonaws.com
+        VITE_GIPHY_API_KEY: N1ChWoOAZj7XVelZKNlsCfIhtH39lm75
         NODE_ENV: production
