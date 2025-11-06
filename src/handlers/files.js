@@ -5,16 +5,19 @@ import crypto from "crypto";
 const s3 = new AWS.S3({ region: "eu-west-2" });
 const BUCKET = process.env.ATTACHMENTS_BUCKET;
 
-const response = (statusCode, body) => ({
+// src/helpers/response.js
+export const response = (statusCode, body = {}) => ({
   statusCode,
   headers: {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "OPTIONS,POST",
-    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    "Access-Control-Allow-Headers":
+      "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent",
+    "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
   },
   body: JSON.stringify(body),
 });
+
 
 export const handler = async (event) => {
   console.log("📤 FILE UPLOAD EVENT:", event);

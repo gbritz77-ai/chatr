@@ -29,11 +29,30 @@ provider:
     binaryMediaTypes:
       - "*/*"
     metrics: true
+    # ✅ Make sure OPTIONS preflight is globally supported
+    # (important for Amplify deployments)
+    defaultCorsPreflightOptions:
+      allowOrigins:
+        - "*"
+      allowHeaders:
+        - "*"
+        - Content-Type
+        - Authorization
+        - X-Amz-Date
+        - X-Api-Key
+        - X-Amz-Security-Token
+        - X-Amz-User-Agent
+      allowMethods:
+        - OPTIONS
+        - GET
+        - POST
+        - PUT
+        - DELETE
+      allowCredentials: false
 
-  # ✅ Environment variables (removed AWS_REGION to avoid reserved key error)
   environment:
     JWT_SECRET: SuperSecretKey123!
-    VITE_API_BASE: https://sud3788n42.execute-api.eu-west-2.amazonaws.com
+    VITE_API_BASE: https://6ideo0rlff.execute-api.eu-west-2.amazonaws.com/dev
     MEMBERS_TABLE: chatr-members
     MESSAGES_TABLE: chatr-messages
     GROUPS_TABLE: chatr-groups
@@ -97,171 +116,145 @@ package:
     - "!**/LICENSE*"
 
 # ============================================================
+# 🌍 Global CORS configuration helper
+# ============================================================
+x-cors:
+  origin: "*"
+  headers:
+    - Content-Type
+    - Authorization
+    - X-Amz-Date
+    - X-Api-Key
+    - X-Amz-Security-Token
+    - X-Amz-User-Agent
+  allowCredentials: false
+  methods:
+    - OPTIONS
+    - GET
+    - POST
+    - PUT
+    - DELETE
+
+# ============================================================
 # 🔧 Lambda Functions — Cleaned + CORS Safe
 # ============================================================
 functions:
-  # --- 🔐 AUTH ---
   auth:
     handler: src/handlers/auth.handler
     events:
       - http:
           path: auth
           method: post
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: ${self:x-cors}
+      - http:
+          path: auth
+          method: options
+          cors: ${self:x-cors}
 
-  # --- 🧾 REGISTER ---
   register:
     handler: src/handlers/register.handler
     events:
       - http:
           path: auth/register
           method: post
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: ${self:x-cors}
+      - http:
+          path: auth/register
+          method: options
+          cors: ${self:x-cors}
 
-  # --- 👥 MEMBERS ---
   members:
     handler: src/handlers/members.handler
     events:
       - http:
           path: members
           method: any
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: ${self:x-cors}
+      - http:
+          path: members
+          method: options
+          cors: ${self:x-cors}
 
-  # --- 💬 MESSAGES ---
   messages:
     handler: src/handlers/messages.handler
     events:
       - http:
           path: messages
           method: any
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: ${self:x-cors}
       - http:
           path: messages/unread-counts
           method: get
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: ${self:x-cors}
+      - http:
+          path: messages/unread-counts
+          method: options
+          cors: ${self:x-cors}
 
-  # --- 👨‍👩‍👧 GROUPS ---
   groups:
     handler: src/handlers/groups.handler
     events:
       - http:
           path: groups
           method: any
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: ${self:x-cors}
       - http:
           path: groups/add
           method: put
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: ${self:x-cors}
       - http:
           path: groups/remove
           method: put
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: ${self:x-cors}
       - http:
           path: groups/delete
           method: delete
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: ${self:x-cors}
+      - http:
+          path: groups
+          method: options
+          cors: ${self:x-cors}
 
-  # --- 📤 PRESIGNED UPLOAD ---
   presignUpload:
     handler: src/handlers/presignUpload.handler
     events:
       - http:
           path: presign-upload
           method: post
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: ${self:x-cors}
+      - http:
+          path: presign-upload
+          method: options
+          cors: ${self:x-cors}
 
-  # --- 📥 PRESIGNED DOWNLOAD ---
   presignDownload:
     handler: src/handlers/presignDownload.handler
     events:
       - http:
           path: presign-download
           method: post
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: ${self:x-cors}
+      - http:
+          path: presign-download
+          method: options
+          cors: ${self:x-cors}
 
-  # --- ✍️ TYPING INDICATORS ---
   typing:
     handler: src/handlers/typing.handler
     events:
       - http:
           path: typing/start
           method: post
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: ${self:x-cors}
       - http:
           path: typing/stop
           method: post
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: ${self:x-cors}
       - http:
           path: typing
           method: get
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-            allowCredentials: false
+          cors: ${self:x-cors}
+      - http:
+          path: typing
+          method: options
+          cors: ${self:x-cors}

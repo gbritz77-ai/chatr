@@ -20,6 +20,6 @@ applications:
           - node_modules/**/*
     environment:
       variables:
-        VITE_API_BASE: https://n5dczw3bzj.execute-api.eu-west-2.amazonaws.com
+        VITE_API_BASE: https://6ideo0rlff.execute-api.eu-west-2.amazonaws.com
         VITE_GIPHY_API_KEY: N1ChWoOAZj7XVelZKNlsCfIhtH39lm75
         NODE_ENV: production

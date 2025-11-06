@@ -13,11 +13,12 @@ const response = (statusCode, body) => ({
   headers: {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent",
     "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
   },
   body: JSON.stringify(body),
 });
+
 
 /* ============================================================
    🧩 Main Handler

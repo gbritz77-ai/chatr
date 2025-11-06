@@ -11,11 +11,13 @@ export const handler = async (event) => {
     if (!chatId || !sender || !text || !timestamp) {
       return {
         statusCode: 400,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
+       headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers":
+          "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent",
+        "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
+      },
         body: JSON.stringify({ message: "Missing required fields" }),
       };
     }

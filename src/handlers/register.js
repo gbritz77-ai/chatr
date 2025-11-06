@@ -10,18 +10,19 @@ const JWT_SECRET = process.env.JWT_SECRET;
 /* ===========================================================
    🧱 Common Headers + Helper
 =========================================================== */
-const headers = {
-  "Content-Type": "application/json",
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type,Authorization",
-  "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
-};
-
-const response = (statusCode, body) => ({
+// src/helpers/response.js
+export const response = (statusCode, body = {}) => ({
   statusCode,
-  headers,
+  headers: {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers":
+      "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent",
+    "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
+  },
   body: JSON.stringify(body),
 });
+
 
 /* ===========================================================
    🧩 Handler
