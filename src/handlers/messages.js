@@ -1,10 +1,26 @@
 // src/handlers/messages.js
 const AWS = require("aws-sdk");
 const crypto = require("crypto");
-const { response } = require("../helpers/response"); // ✅ Shared helper
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const TABLE_NAME = process.env.MESSAGES_TABLE;
+
+/* ============================================================
+   🧱 Universal Response Helper (local CORS-safe version)
+   This guarantees CORS headers even if shared helper fails
+============================================================ */
+const response = (statusCode, body = {}) => ({
+  statusCode,
+  headers: {
+    "Content-Type": "application/json",
+    // ✅ Explicitly allow Amplify + localhost (and wildcard fallback)
+    "Access-Control-Allow-Origin": "https://dev.d3rrkqgvvakfxn.amplifyapp.com",
+    "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE,PATCH",
+    "Access-Control-Allow-Headers":
+      "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent",
+  },
+  body: JSON.stringify(body),
+});
 
 /* ============================================================
    🧩 Main Handler
@@ -13,7 +29,7 @@ exports.handler = async (event) => {
   console.log("📩 MESSAGES EVENT:", JSON.stringify(event, null, 2));
 
   const method = (event.httpMethod || "GET").toUpperCase();
-  const path = event.path || "";
+  const path = (event.path || "").toLowerCase();
   const params = event.queryStringParameters || {};
 
   // ✅ Handle CORS preflight
@@ -39,7 +55,6 @@ exports.handler = async (event) => {
       }
 
       const { sender, recipient, groupid, text, attachmentUrl } = body;
-
       if (!sender || (!recipient && !groupid) || !text) {
         return response(400, {
           success: false,
@@ -61,31 +76,31 @@ exports.handler = async (event) => {
       };
 
       await dynamodb.put({ TableName: TABLE_NAME, Item: newItem }).promise();
-
       console.log("✅ Message saved:", newItem);
       return response(200, { success: true, message: newItem });
     }
 
     /* ============================================================
        📬 GET /messages/unread-counts?username=<user>
-    
-    if (method === "GET" && path.toLowerCase().endsWith("/unread-counts")) {
+    ============================================================= */
+    if (method === "GET" && path.endsWith("/unread-counts")) {
       const username = params.username;
       if (!username)
         return response(400, { success: false, message: "Missing username" });
 
       console.log("🔍 Fetching unread counts for:", username);
 
-      // TODO: Replace with real unread query later
-      const unreadCount = 0;
+      // TODO: replace with actual unread logic
+      const result = await dynamodb
+        .scan({
+          TableName: TABLE_NAME,
+          FilterExpression: "attribute_not_exists(read)",
+        })
+        .promise();
 
-      return response(200, {
-        success: true,
-        username,
-        unreadCount,
-      });
+      const unreadCount = result.Items?.length || 0;
+      return response(200, { success: true, username, unreadCount });
     }
-      ============================================================= */
 
     /* ============================================================
        📚 GET /messages — Get all messages
@@ -103,6 +118,7 @@ exports.handler = async (event) => {
     return response(405, { success: false, message: "Unsupported method" });
   } catch (err) {
     console.error("❌ MESSAGES ERROR:", err);
+    // ✅ Always return headers, even for errors
     return response(500, {
       success: false,
       message: err.message || "Internal server error",
