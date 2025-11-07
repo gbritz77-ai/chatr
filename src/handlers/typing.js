@@ -1,59 +1,62 @@
 // src/handlers/typing.js
 const AWS = require("aws-sdk");
-const dynamodb = new AWS.DynamoDB.DocumentClient();
+const { response } = require("../helpers/response"); // ✅ shared CORS-safe helper
 
+const dynamodb = new AWS.DynamoDB.DocumentClient();
 const TABLE_NAME = process.env.TYPING_TABLE || "chatr-typing-status";
 const MEMBERS_TABLE = process.env.MEMBERS_TABLE || "chatr-members";
-
-const response = (statusCode, body) => ({
-  statusCode,
-  headers: {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers":
-      "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent",
-    "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
-  },
-  body: JSON.stringify(body),
-});
 
 /* ======================================================
    🧠 Main Handler
 ====================================================== */
 exports.handler = async (event) => {
   console.log("⌨️ Typing Event:", JSON.stringify(event, null, 2));
-  const method = event.httpMethod || "GET";
+
+  const method = (event.httpMethod || "GET").toUpperCase();
   const path = (event.path || "").toLowerCase();
   let body = {};
 
+  // ✅ Handle malformed JSON safely
   try {
     if (event.body) body = JSON.parse(event.body);
   } catch {
     return response(400, { success: false, message: "Invalid JSON body" });
   }
 
-  if (method === "OPTIONS") return response(200, { message: "CORS OK" });
+  // ✅ Handle CORS preflight
+  if (method === "OPTIONS") {
+    return response(200, { message: "CORS preflight success" });
+  }
 
   try {
+    if (!TABLE_NAME) {
+      console.error("❌ Missing TYPING_TABLE environment variable");
+      return response(500, { success: false, message: "Server misconfiguration" });
+    }
+
     /* ======================================================
        🟢 POST /typing/start
     ====================================================== */
     if (method === "POST" && path.endsWith("/typing/start")) {
       const usernameRaw = body.username || body.user || "";
       const chatidRaw = body.chatid || body.chatId || body.chat || "";
-      const username = usernameRaw.toLowerCase();
-      const chatid = chatidRaw.toLowerCase();
+      const username = usernameRaw.trim().toLowerCase();
+      const chatid = chatidRaw.trim().toLowerCase();
 
-      if (!username || !chatid)
+      if (!username || !chatid) {
+        console.warn("⚠️ Missing chatid or username:", { username, chatid });
         return response(400, { success: false, message: "Missing chatid or username" });
+      }
 
-      // 🧠 Ignore self-chat typing states like CHAT#user#user
+      // 🧠 Ignore self-chat typing (e.g., CHAT#user#user)
       const parts = chatid.split("#");
-      if (parts[1] && parts[1] === parts[2])
+      if (parts[1] && parts[1] === parts[2]) {
+        console.log("🪶 Ignored self-chat typing event:", chatid);
         return response(200, { success: true, message: "Self-chat ignored" });
+      }
 
       const now = Date.now();
-      const ttlSeconds = 15; // expires automatically after 15s
+      const ttlSeconds = 15; // auto-expire after 15 seconds
       const expiresAt = Math.floor(now / 1000) + ttlSeconds;
 
       await dynamodb
@@ -64,12 +67,12 @@ exports.handler = async (event) => {
             username,
             typing: true,
             updatedAt: new Date(now).toISOString(),
-            expiresAt, // TTL attribute (epoch seconds)
+            expiresAt, // TTL in epoch seconds
           },
         })
         .promise();
 
-      // Update member's lastActive time (optional)
+      // Optional: Update lastActive timestamp
       try {
         await dynamodb
           .update({
@@ -80,9 +83,10 @@ exports.handler = async (event) => {
           })
           .promise();
       } catch (err) {
-        console.warn("⚠️ lastActive update failed:", err);
+        console.warn("⚠️ lastActive update failed:", err.message);
       }
 
+      console.log(`✅ Typing started by ${username} in ${chatid}`);
       return response(200, { success: true, message: "Typing started" });
     }
 
@@ -92,11 +96,13 @@ exports.handler = async (event) => {
     if (method === "POST" && path.endsWith("/typing/stop")) {
       const usernameRaw = body.username || body.user || "";
       const chatidRaw = body.chatid || body.chatId || body.chat || "";
-      const username = usernameRaw.toLowerCase();
-      const chatid = chatidRaw.toLowerCase();
+      const username = usernameRaw.trim().toLowerCase();
+      const chatid = chatidRaw.trim().toLowerCase();
 
-      if (!username || !chatid)
+      if (!username || !chatid) {
+        console.warn("⚠️ Missing chatid or username for stop:", { username, chatid });
         return response(400, { success: false, message: "Missing chatid or username" });
+      }
 
       await dynamodb
         .delete({
@@ -105,6 +111,7 @@ exports.handler = async (event) => {
         })
         .promise();
 
+      console.log(`🛑 Typing stopped by ${username} in ${chatid}`);
       return response(200, { success: true, message: "Typing stopped" });
     }
 
@@ -112,11 +119,15 @@ exports.handler = async (event) => {
        👀 GET /typing?chatid=...
     ====================================================== */
     if (method === "GET" && path.endsWith("/typing")) {
-      const chatidRaw = event.queryStringParameters?.chatid || event.queryStringParameters?.chatId;
-      const chatid = (chatidRaw || "").toLowerCase();
+      const chatidRaw =
+        event.queryStringParameters?.chatid ||
+        event.queryStringParameters?.chatId;
+      const chatid = (chatidRaw || "").trim().toLowerCase();
 
-      if (!chatid)
+      if (!chatid) {
+        console.warn("⚠️ Missing chatid in query params");
         return response(400, { success: false, message: "Missing chatid" });
+      }
 
       const result = await dynamodb
         .scan({
@@ -129,15 +140,21 @@ exports.handler = async (event) => {
       const usersTyping =
         result.Items?.filter((x) => x.typing)?.map((x) => x.username) || [];
 
+      console.log(`👀 Active typers in ${chatid}:`, usersTyping);
       return response(200, { success: true, usersTyping });
     }
 
     /* ======================================================
-       🚫 Fallback
+       🚫 Unsupported route/method
     ====================================================== */
-    return response(404, { success: false, message: "Invalid route" });
+    console.warn("🚫 Unsupported typing route:", { method, path });
+    return response(404, { success: false, message: "Invalid route or method" });
   } catch (err) {
     console.error("❌ Typing handler error:", err);
-    return response(500, { success: false, message: err.message });
+    return response(500, {
+      success: false,
+      message: err.message || "Internal server error",
+      errorCode: err.code || "UnknownError",
+    });
   }
 };

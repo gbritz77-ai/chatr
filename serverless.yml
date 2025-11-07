@@ -9,6 +9,7 @@ custom:
   dotenv:
     path: .env
     logging: true
+
   serverless-offline:
     httpPort: 3000
     lambdaPort: 3002
@@ -17,38 +18,33 @@ custom:
     corsAllowOrigin: "*"
     noPrependStageInUrl: false
 
+  # 🌍 Shared CORS configuration
+  cors:
+    origins:
+      - "https://dev.d3rrkqgvvakfxn.amplifyapp.com"
+      - "http://localhost:5173"
+      - "*" # fallback for local testing
+    headers:
+      - Content-Type
+      - Authorization
+      - X-Amz-Date
+      - X-Api-Key
+      - X-Amz-Security-Token
+      - X-Amz-User-Agent
+    methods:
+      - OPTIONS
+      - GET
+      - POST
+      - PUT
+      - PATCH
+      - DELETE
+    allowCredentials: false
+
 provider:
   name: aws
   runtime: nodejs20.x
   region: eu-west-2
   stage: dev
-
-  apiGateway:
-    shouldStartNameWithService: true
-    minimumCompressionSize: 1024
-    binaryMediaTypes:
-      - "*/*"
-    metrics: true
-    # ✅ Make sure OPTIONS preflight is globally supported
-    # (important for Amplify deployments)
-    defaultCorsPreflightOptions:
-      allowOrigins:
-        - "*"
-      allowHeaders:
-        - "*"
-        - Content-Type
-        - Authorization
-        - X-Amz-Date
-        - X-Api-Key
-        - X-Amz-Security-Token
-        - X-Amz-User-Agent
-      allowMethods:
-        - OPTIONS
-        - GET
-        - POST
-        - PUT
-        - DELETE
-      allowCredentials: false
 
   environment:
     JWT_SECRET: SuperSecretKey123!
@@ -64,7 +60,7 @@ provider:
   iam:
     role:
       statements:
-        # ✅ DynamoDB permissions
+        # DynamoDB
         - Effect: Allow
           Action:
             - dynamodb:Scan
@@ -80,11 +76,12 @@ provider:
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-typing-status
 
-        # ✅ S3 permissions
+        # S3
         - Effect: Allow
           Action:
             - s3:ListBucket
           Resource: arn:aws:s3:::outsec-chat-bucket
+
         - Effect: Allow
           Action:
             - s3:GetObject
@@ -92,7 +89,7 @@ provider:
             - s3:DeleteObject
           Resource: arn:aws:s3:::outsec-chat-bucket/*
 
-        # ✅ CloudWatch logs
+        # Logs
         - Effect: Allow
           Action:
             - logs:CreateLogGroup
@@ -100,8 +97,36 @@ provider:
             - logs:PutLogEvents
           Resource: arn:aws:logs:eu-west-2:*:log-group:*
 
+  # ✅ Enforce CORS inside API Gateway itself
+  apiGateway:
+    shouldStartNameWithService: true
+    binaryMediaTypes:
+      - "*/*"
+    minimumCompressionSize: 1024
+    metrics: true
+    defaultCorsPreflightOptions:
+      allowOrigins:
+        - "https://dev.d3rrkqgvvakfxn.amplifyapp.com"
+        - "http://localhost:5173"
+        - "*"
+      allowHeaders:
+        - Content-Type
+        - Authorization
+        - X-Amz-Date
+        - X-Api-Key
+        - X-Amz-Security-Token
+        - X-Amz-User-Agent
+      allowMethods:
+        - OPTIONS
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+      allowCredentials: false
+
 # ============================================================
-# 📦 Package optimization
+# 📦 Package Optimization
 # ============================================================
 package:
   individually: true
@@ -116,27 +141,7 @@ package:
     - "!**/LICENSE*"
 
 # ============================================================
-# 🌍 Global CORS configuration helper
-# ============================================================
-x-cors:
-  origin: "*"
-  headers:
-    - Content-Type
-    - Authorization
-    - X-Amz-Date
-    - X-Api-Key
-    - X-Amz-Security-Token
-    - X-Amz-User-Agent
-  allowCredentials: false
-  methods:
-    - OPTIONS
-    - GET
-    - POST
-    - PUT
-    - DELETE
-
-# ============================================================
-# 🔧 Lambda Functions — Cleaned + CORS Safe
+# 🔧 Lambda Functions — CORS auto-applied
 # ============================================================
 functions:
   auth:
@@ -145,11 +150,7 @@ functions:
       - http:
           path: auth
           method: post
-          cors: ${self:x-cors}
-      - http:
-          path: auth
-          method: options
-          cors: ${self:x-cors}
+          cors: true
 
   register:
     handler: src/handlers/register.handler
@@ -157,11 +158,7 @@ functions:
       - http:
           path: auth/register
           method: post
-          cors: ${self:x-cors}
-      - http:
-          path: auth/register
-          method: options
-          cors: ${self:x-cors}
+          cors: true
 
   members:
     handler: src/handlers/members.handler
@@ -169,11 +166,7 @@ functions:
       - http:
           path: members
           method: any
-          cors: ${self:x-cors}
-      - http:
-          path: members
-          method: options
-          cors: ${self:x-cors}
+          cors: true
 
   messages:
     handler: src/handlers/messages.handler
@@ -181,15 +174,11 @@ functions:
       - http:
           path: messages
           method: any
-          cors: ${self:x-cors}
+          cors: true
       - http:
           path: messages/unread-counts
           method: get
-          cors: ${self:x-cors}
-      - http:
-          path: messages/unread-counts
-          method: options
-          cors: ${self:x-cors}
+          cors: true
 
   groups:
     handler: src/handlers/groups.handler
@@ -197,23 +186,19 @@ functions:
       - http:
           path: groups
           method: any
-          cors: ${self:x-cors}
+          cors: true
       - http:
           path: groups/add
           method: put
-          cors: ${self:x-cors}
+          cors: true
       - http:
           path: groups/remove
           method: put
-          cors: ${self:x-cors}
+          cors: true
       - http:
           path: groups/delete
           method: delete
-          cors: ${self:x-cors}
-      - http:
-          path: groups
-          method: options
-          cors: ${self:x-cors}
+          cors: true
 
   presignUpload:
     handler: src/handlers/presignUpload.handler
@@ -221,11 +206,7 @@ functions:
       - http:
           path: presign-upload
           method: post
-          cors: ${self:x-cors}
-      - http:
-          path: presign-upload
-          method: options
-          cors: ${self:x-cors}
+          cors: true
 
   presignDownload:
     handler: src/handlers/presignDownload.handler
@@ -233,11 +214,15 @@ functions:
       - http:
           path: presign-download
           method: post
-          cors: ${self:x-cors}
+          cors: true
+
+  workSchedule:
+    handler: src/handlers/workSchedule.handler
+    events:
       - http:
-          path: presign-download
-          method: options
-          cors: ${self:x-cors}
+          path: work-schedule
+          method: any
+          cors: true
 
   typing:
     handler: src/handlers/typing.handler
@@ -245,16 +230,12 @@ functions:
       - http:
           path: typing/start
           method: post
-          cors: ${self:x-cors}
+          cors: true
       - http:
           path: typing/stop
           method: post
-          cors: ${self:x-cors}
+          cors: true
       - http:
           path: typing
           method: get
-          cors: ${self:x-cors}
-      - http:
-          path: typing
-          method: options
-          cors: ${self:x-cors}
+          cors: true

@@ -1,22 +1,9 @@
 // src/handlers/members.js
 const AWS = require("aws-sdk");
+const { response } = require("../helpers/response"); // ✅ Use shared helper
+
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const TABLE_NAME = process.env.MEMBERS_TABLE || "chatr-members";
-
-/* ===========================================================
-   🧩 Response Helper
-=========================================================== */
-const response = (statusCode, body) => ({
-  statusCode,
-  headers: {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent",
-    "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
-  },
-  body: JSON.stringify(body),
-});
-
 
 /* ===========================================================
    🧠 Main Handler
@@ -24,10 +11,11 @@ const response = (statusCode, body) => ({
 exports.handler = async (event) => {
   console.log("👥 MEMBERS EVENT:", JSON.stringify(event, null, 2));
 
-  const method = event.httpMethod || "GET";
+  const method = (event.httpMethod || "GET").toUpperCase();
   const rawPath = event.path || "";
   const params = event.queryStringParameters || {};
   const pathUserId = event.pathParameters?.userid;
+
   console.log("➡️ Method:", method, "| Path:", rawPath, "| Params:", params);
 
   // ✅ Handle CORS preflight
@@ -36,12 +24,18 @@ exports.handler = async (event) => {
   }
 
   try {
+    if (!TABLE_NAME) {
+      console.error("❌ Missing MEMBERS_TABLE environment variable");
+      return response(500, { success: false, message: "Server misconfiguration" });
+    }
+
     /* ===========================================================
        📜 GET /members → List all members
     =========================================================== */
     const isListRequest =
       method === "GET" &&
-      (!pathUserId && !params.userid) &&
+      !pathUserId &&
+      !params.userid &&
       (rawPath.endsWith("/members") ||
         rawPath.includes("/dev/members") ||
         rawPath === "/members");
@@ -98,6 +92,8 @@ exports.handler = async (event) => {
         createdAt: result.Item.createdAt || null,
         lastLogin: result.Item.lastLogin || null,
         role: result.Item.role || "member",
+        workSchedule: result.Item.workSchedule || null,
+        lastActive: result.Item.lastActive || null,
       };
 
       return response(200, { success: true, member });
@@ -110,6 +106,10 @@ exports.handler = async (event) => {
     return response(405, { success: false, message: "Method not allowed" });
   } catch (err) {
     console.error("❌ MEMBERS HANDLER ERROR:", err);
-    return response(500, { success: false, message: err.message });
+    return response(500, {
+      success: false,
+      message: err.message || "Internal server error",
+      errorCode: err.code || "UnknownError",
+    });
   }
 };

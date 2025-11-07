@@ -1,55 +1,81 @@
-// src/handlers/presign-download.js
+// src/handlers/presignDownload.js
 const AWS = require("aws-sdk");
+const { response } = require("../helpers/response"); // ✅ Shared CORS-safe helper
 
-AWS.config.update({ region: process.env.AWS_REGION });
+AWS.config.update({ region: process.env.AWS_REGION || "eu-west-2" });
+
 const s3 = new AWS.S3({ signatureVersion: "v4" });
-const BUCKET = process.env.ATTACHMENTS_BUCKET;
+const BUCKET = process.env.ATTACHMENTS_BUCKET || "outsec-chat-bucket";
 
-// src/helpers/response.js
-export const response = (statusCode, body = {}) => ({
-  statusCode,
-  headers: {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers":
-      "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent",
-    "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
-  },
-  body: JSON.stringify(body),
-});
-
-
+/* ============================================================
+   🧠 Presign Download Handler
+============================================================ */
 exports.handler = async (event) => {
-  console.log("📥 PRESIGN-DOWNLOAD EVENT:", JSON.stringify(event, null, 2));
+  console.log("📥 PRESIGN DOWNLOAD EVENT:", JSON.stringify(event, null, 2));
 
-  if (event.httpMethod === "OPTIONS") {
-    return response(200, { success: true, message: "CORS OK" });
+  const method = (event.httpMethod || "GET").toUpperCase();
+
+  // ✅ Handle CORS preflight
+  if (method === "OPTIONS") {
+    console.log("🟢 CORS preflight OK");
+    return response(200, { message: "CORS preflight success" });
   }
 
   try {
-    const body = (() => {
+    /* ============================================================
+       📦 Parse body or query params
+    ============================================================= */
+    let key = "";
+    if (method === "POST") {
       try {
-        return JSON.parse(event.body || "{}");
+        const body = JSON.parse(event.body || "{}");
+        key = decodeURIComponent(body.key || body.fileKey || "").trim();
       } catch {
-        return {};
+        console.warn("⚠️ Invalid JSON body received");
+        return response(400, { success: false, message: "Invalid JSON body" });
       }
-    })();
+    } else if (method === "GET") {
+      key = decodeURIComponent(
+        event.queryStringParameters?.key || event.queryStringParameters?.fileKey || ""
+      ).trim();
+    }
 
-    const key = decodeURIComponent(body.key || body.fileKey || "").trim();
     if (!key) {
-      console.warn("⚠️ Missing 'key' or 'fileKey' in request body.");
+      console.warn("⚠️ Missing 'key' or 'fileKey' in request.");
       return response(400, { success: false, message: "Missing file key" });
     }
 
-    console.log(`🪣 Generating presigned URL for s3://${BUCKET}/${key}`);
+    if (!BUCKET) {
+      console.error("❌ Missing ATTACHMENTS_BUCKET env variable");
+      return response(500, {
+        success: false,
+        message: "Server misconfiguration: no S3 bucket defined",
+      });
+    }
 
-    // Check existence and get metadata
-    const head = await s3.headObject({ Bucket: BUCKET, Key: key }).promise();
+    console.log(`🪣 Generating presigned download URL for s3://${BUCKET}/${key}`);
+
+    /* ============================================================
+       🔍 Check file exists (HEAD request)
+    ============================================================= */
+    let head;
+    try {
+      head = await s3.headObject({ Bucket: BUCKET, Key: key }).promise();
+    } catch (err) {
+      if (err.code === "NotFound" || err.code === "NoSuchKey") {
+        console.warn("⚠️ File not found:", key);
+        return response(404, { success: false, message: "File not found in S3" });
+      }
+      throw err; // rethrow unexpected errors
+    }
+
     const contentType = head.ContentType || "application/octet-stream";
-
-    const expiresIn = 3600 * 6; // 6 hours
+    const expiresIn = 60 * 60 * 6; // 6 hours
     const filename = key.split("/").pop();
 
+    /* ============================================================
+       🔐 Generate presigned GET URL
+    ============================================================= */
     const params = {
       Bucket: BUCKET,
       Key: key,
@@ -61,19 +87,25 @@ exports.handler = async (event) => {
 
     const viewURL = await s3.getSignedUrlPromise("getObject", params);
 
-    console.log("✅ Presigned download URL generated.");
-    return response(200, { success: true, viewURL, expiresIn });
+    console.log("✅ Presigned download URL generated successfully.");
+
+    return response(200, {
+      success: true,
+      message: "Presigned download URL generated successfully",
+      viewURL,
+      expiresInSeconds: expiresIn,
+      filename,
+      contentType,
+    });
   } catch (err) {
-    console.error("❌ PRESIGN-DOWNLOAD ERROR:", err);
+    console.error("❌ PRESIGN DOWNLOAD ERROR:", err);
 
     const safeMessage =
-      err.code === "NotFound"
-        ? "File not found in S3"
-        : err.code === "AccessDenied"
+      err.code === "AccessDenied"
         ? "Access denied to file"
         : err.code === "CredentialsError"
         ? "Server configuration issue (missing S3 credentials)"
-        : "Failed to generate download URL";
+        : err.message || "Failed to generate download URL";
 
     return response(500, { success: false, message: safeMessage });
   }

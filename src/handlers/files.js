@@ -1,29 +1,23 @@
 // src/handlers/files.js
-import AWS from "aws-sdk";
-import crypto from "crypto";
+const AWS = require("aws-sdk");
+const crypto = require("crypto");
+const { response } = require("../helpers/response"); // ✅ shared helper
 
 const s3 = new AWS.S3({ region: "eu-west-2" });
 const BUCKET = process.env.ATTACHMENTS_BUCKET;
 
-// src/helpers/response.js
-export const response = (statusCode, body = {}) => ({
-  statusCode,
-  headers: {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers":
-      "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent",
-    "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
-  },
-  body: JSON.stringify(body),
-});
+exports.handler = async (event) => {
+  console.log("📤 FILE UPLOAD EVENT:", JSON.stringify(event, null, 2));
 
+  const method = (event.httpMethod || "").toUpperCase();
 
-export const handler = async (event) => {
-  console.log("📤 FILE UPLOAD EVENT:", event);
+  // ✅ Handle CORS preflight requests
+  if (method === "OPTIONS") {
+    return response(200, { message: "CORS preflight OK" });
+  }
 
-  if (event.httpMethod === "OPTIONS") {
-    return response(200, { message: "CORS preflight ok" });
+  if (method !== "POST") {
+    return response(405, { success: false, message: "Method not allowed" });
   }
 
   try {
@@ -32,7 +26,10 @@ export const handler = async (event) => {
 
     if (!base64 || !name || !type) {
       console.error("⚠️ Missing fields:", { base64: !!base64, name, type });
-      return response(400, { success: false, message: "Missing base64, name, or type" });
+      return response(400, {
+        success: false,
+        message: "Missing base64, name, or type",
+      });
     }
 
     // Strip possible "data:mime/type;base64," prefix
@@ -40,7 +37,9 @@ export const handler = async (event) => {
 
     const fileBuffer = Buffer.from(cleanBase64, "base64");
     const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const key = `attachments/${Date.now()}-${crypto.randomBytes(4).toString("hex")}-${safeName}`;
+    const key = `attachments/${Date.now()}-${crypto
+      .randomBytes(4)
+      .toString("hex")}-${safeName}`;
 
     console.log(`🪣 Uploading to S3: ${BUCKET}/${key} (${type})`);
 

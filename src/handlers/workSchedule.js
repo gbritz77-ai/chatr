@@ -1,39 +1,36 @@
 // src/handlers/workSchedule.js
 const AWS = require("aws-sdk");
 const jwt = require("jsonwebtoken");
+const { response } = require("../helpers/response"); // ✅ Shared CORS-safe helper
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 const TABLE_NAME = process.env.MEMBERS_TABLE || "chatr-members";
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || "default-secret";
 
-const response = (statusCode, body) => ({
-  statusCode,
-  headers: {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers":
-      "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent",
-    "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
-  },
-  body: JSON.stringify(body),
-});
-
+/* ======================================================
+   🧠 Main Handler
+====================================================== */
 exports.handler = async (event) => {
   console.log("🕒 WorkSchedule Event:", JSON.stringify(event, null, 2));
 
-  const method = event.httpMethod;
+  const method = (event.httpMethod || "GET").toUpperCase();
+  const path = (event.path || "").toLowerCase();
   const params = event.queryStringParameters || {};
   let body = {};
 
+  // ✅ Safely parse body
   try {
     if (event.body) body = JSON.parse(event.body);
   } catch {
-    return response(400, { success: false, message: "Invalid JSON" });
+    return response(400, { success: false, message: "Invalid JSON body" });
   }
 
-  if (method === "OPTIONS") return response(200, {});
+  // ✅ CORS preflight
+  if (method === "OPTIONS") {
+    return response(200, { message: "CORS preflight success" });
+  }
 
-  // 🧩 Try get user from token
+  // ✅ Decode and verify JWT (optional)
   let requester = null;
   const authHeader = event.headers?.Authorization || event.headers?.authorization;
   if (authHeader?.startsWith("Bearer ")) {
@@ -41,16 +38,22 @@ exports.handler = async (event) => {
       const token = authHeader.split(" ")[1];
       const decoded = jwt.verify(token, JWT_SECRET);
       requester = decoded.username || decoded.userid;
+      console.log("🔑 Authenticated as:", requester);
     } catch (err) {
       console.warn("⚠️ Invalid token:", err.message);
     }
   }
 
   try {
+    if (!TABLE_NAME) {
+      console.error("❌ Missing MEMBERS_TABLE environment variable");
+      return response(500, { success: false, message: "Server misconfiguration" });
+    }
+
     /* ======================================================
        📄 GET /work-schedule?username=...
     ====================================================== */
-    if (method === "GET") {
+    if (method === "GET" && path.endsWith("/work-schedule")) {
       const username = params.username || requester;
       if (!username)
         return response(400, { success: false, message: "Missing username" });
@@ -67,7 +70,7 @@ exports.handler = async (event) => {
 
       let schedule = result.Item.workSchedule || null;
 
-      // 🧠 Backward-compatibility: convert old format (start/end/days)
+      // 🧠 Convert legacy format (start, end, days[])
       if (schedule && schedule.start && schedule.end && Array.isArray(schedule.days)) {
         const newSched = {
           Mon: { start: "09:00", end: "17:00", enabled: false },
@@ -81,14 +84,18 @@ exports.handler = async (event) => {
 
         schedule.days.forEach((day) => {
           if (newSched[day]) {
-            newSched[day] = { start: schedule.start, end: schedule.end, enabled: true };
+            newSched[day] = {
+              start: schedule.start,
+              end: schedule.end,
+              enabled: true,
+            };
           }
         });
 
         schedule = newSched;
       }
 
-      // 🧩 Default fallback if user has no schedule yet
+      // 🧩 Default fallback
       if (!schedule) {
         schedule = {
           Mon: { start: "09:00", end: "17:00", enabled: true },
@@ -101,16 +108,14 @@ exports.handler = async (event) => {
         };
       }
 
-      return response(200, {
-        success: true,
-        schedule,
-      });
+      console.log(`✅ Schedule retrieved for ${username}`);
+      return response(200, { success: true, schedule });
     }
 
     /* ======================================================
-       ✏️ PUT /work-schedule (self only)
+       ✏️ PUT /work-schedule (update self)
     ====================================================== */
-    if (method === "PUT") {
+    if (method === "PUT" && path.endsWith("/work-schedule")) {
       const { userid, workSchedule } = body;
 
       if (!userid || !workSchedule)
@@ -125,7 +130,7 @@ exports.handler = async (event) => {
           message: "You can only update your own schedule",
         });
 
-      // ✅ Sanitize schedule: ensure all 7 days exist
+      // ✅ Normalize schedule
       const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
       const cleanSchedule = {};
       for (const d of days) {
@@ -146,15 +151,21 @@ exports.handler = async (event) => {
         })
         .promise();
 
-      return response(200, {
-        success: true,
-        message: "Work schedule saved",
-      });
+      console.log(`✅ Work schedule saved for ${userid}`);
+      return response(200, { success: true, message: "Work schedule saved" });
     }
 
+    /* ======================================================
+       🚫 Unsupported route/method
+    ====================================================== */
+    console.warn("🚫 Unsupported route or method:", method, path);
     return response(405, { success: false, message: "Method not allowed" });
   } catch (err) {
-    console.error("❌ WorkSchedule error:", err);
-    return response(500, { success: false, message: err.message });
+    console.error("❌ WorkSchedule ERROR:", err);
+    return response(500, {
+      success: false,
+      message: err.message || "Internal server error",
+      errorCode: err.code || "UnknownError",
+    });
   }
 };

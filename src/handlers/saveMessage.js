@@ -1,58 +1,79 @@
 // src/handlers/saveMessages.js
-import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
+const AWS = require("aws-sdk");
+const { response } = require("../helpers/response"); // ✅ shared CORS-safe helper
 
-const client = new DynamoDBClient(); // region inherited automatically
+const dynamodb = new AWS.DynamoDB.DocumentClient();
+const TABLE_NAME = process.env.DYNAMODB_TABLE || process.env.MESSAGES_TABLE || "chatr-messages";
 
-export const handler = async (event) => {
+/* ============================================================
+   💬 SaveMessages Handler
+============================================================ */
+exports.handler = async (event) => {
+  console.log("💬 SAVE MESSAGES EVENT:", JSON.stringify(event, null, 2));
+
+  const method = (event.httpMethod || "POST").toUpperCase();
+
+  // ✅ CORS preflight support
+  if (method === "OPTIONS") {
+    return response(200, { message: "CORS preflight success" });
+  }
+
+  // ✅ Only allow POST requests
+  if (method !== "POST") {
+    console.warn(`🚫 Unsupported method: ${method}`);
+    return response(405, { success: false, message: "Method not allowed" });
+  }
+
   try {
-    const body = JSON.parse(event.body || "{}");
-    const { chatId, sender, text, timestamp } = body;
-
-    if (!chatId || !sender || !text || !timestamp) {
-      return {
-        statusCode: 400,
-       headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers":
-          "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent",
-        "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
-      },
-        body: JSON.stringify({ message: "Missing required fields" }),
-      };
+    // ✅ Parse incoming body safely
+    let body = {};
+    try {
+      body = JSON.parse(event.body || "{}");
+    } catch {
+      return response(400, { success: false, message: "Invalid JSON body" });
     }
 
-    const params = {
-      TableName: process.env.DYNAMODB_TABLE,
-      Item: {
-        chatId: { S: chatId },
-        sender: { S: sender },
-        text: { S: text },
-        timestamp: { S: timestamp },
-      },
+    const { chatId, sender, text, timestamp } = body;
+
+    // ✅ Validate input
+    if (!chatId || !sender || !text || !timestamp) {
+      console.warn("⚠️ Missing required fields:", { chatId, sender, text, timestamp });
+      return response(400, {
+        success: false,
+        message: "Missing required fields: chatId, sender, text, timestamp",
+      });
+    }
+
+    // ✅ Prepare message item
+    const item = {
+      chatId: chatId.trim(),
+      sender: sender.trim(),
+      text: text.trim(),
+      timestamp: timestamp.toString(),
+      createdAt: new Date().toISOString(),
     };
 
-    await client.send(new PutItemCommand(params));
+    // ✅ Save message to DynamoDB
+    await dynamodb
+      .put({
+        TableName: TABLE_NAME,
+        Item: item,
+      })
+      .promise();
 
-    return {
-      statusCode: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-      body: JSON.stringify({ success: true, message: "Message saved" }),
-    };
+    console.log("✅ Message saved successfully:", item);
+
+    return response(200, {
+      success: true,
+      message: "Message saved successfully",
+      item,
+    });
   } catch (err) {
-    console.error("SaveMessages error:", err);
-    return {
-      statusCode: 500,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-      body: JSON.stringify({ success: false, error: err.message }),
-    };
+    console.error("❌ SAVE MESSAGES ERROR:", err);
+    return response(500, {
+      success: false,
+      message: err.message || "Internal server error",
+      errorCode: err.code || "UnknownError",
+    });
   }
 };
