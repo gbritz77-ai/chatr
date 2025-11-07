@@ -18,8 +18,13 @@ applications:
       cache:
         paths:
           - node_modules/**/*
+      customRules:
+        # ✅ This ensures /login, /register, etc. load index.html (SPA routing)
+        - source: </*>
+          target: /index.html
+          status: 200
     environment:
       variables:
-        VITE_API_BASE: https://6ideo0rlff.execute-api.eu-west-2.amazonaws.com
+        VITE_API_BASE: https://6ideo0rlff.execute-api.eu-west-2.amazonaws.com/dev
         VITE_GIPHY_API_KEY: N1ChWoOAZj7XVelZKNlsCfIhtH39lm75
         NODE_ENV: production

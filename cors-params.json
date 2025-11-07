@@ -1,0 +1,5 @@
+{
+  "method.response.header.Access-Control-Allow-Origin": "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'",
+  "method.response.header.Access-Control-Allow-Methods": "'OPTIONS,POST'",
+  "method.response.header.Access-Control-Allow-Headers": "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'"
+}

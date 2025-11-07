@@ -19,7 +19,6 @@ custom:
     noPrependStageInUrl: false
 
   # 🌍 Shared CORS configuration
-  custom:
   cors:
     origins:
       - "https://dev.d3rrkqgvvakfxn.amplifyapp.com"
@@ -60,7 +59,6 @@ provider:
   iam:
     role:
       statements:
-        # DynamoDB
         - Effect: Allow
           Action:
             - dynamodb:Scan
@@ -76,7 +74,6 @@ provider:
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-typing-status
 
-        # S3
         - Effect: Allow
           Action:
             - s3:ListBucket
@@ -89,7 +86,6 @@ provider:
             - s3:DeleteObject
           Resource: arn:aws:s3:::outsec-chat-bucket/*
 
-        # Logs
         - Effect: Allow
           Action:
             - logs:CreateLogGroup
@@ -97,7 +93,6 @@ provider:
             - logs:PutLogEvents
           Resource: arn:aws:logs:eu-west-2:*:log-group:*
 
-  # ✅ Enforce CORS inside API Gateway itself
   apiGateway:
     shouldStartNameWithService: true
     binaryMediaTypes:
@@ -125,9 +120,6 @@ provider:
         - DELETE
       allowCredentials: false
 
-# ============================================================
-# 📦 Package Optimization
-# ============================================================
 package:
   individually: true
   excludeDevDependencies: true
@@ -140,21 +132,45 @@ package:
     - "!**/README.md"
     - "!**/LICENSE*"
 
-# ============================================================
-# 🔧 Lambda Functions — CORS auto-applied
-# ============================================================
 functions:
+  # =========================================================
+  # 🧩 AUTH — explicit mock CORS preflight fix
+  # =========================================================
   auth:
-    handler: src/handlers/auth.handler
+    handler: src/handlers/auth.cjs
     events:
       - http:
           path: auth
           method: post
-          cors: true
+          cors:
+            origins:
+              - https://dev.d3rrkqgvvakfxn.amplifyapp.com
+              - http://localhost:5173
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Amz-Date
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
+
+      # ✅ mock OPTIONS to guarantee 200 OK + headers
       - http:
           path: auth
           method: options
-          cors: true
+          integration: mock
+          request:
+            template:
+              application/json: '{"statusCode": 200}'
+          response:
+            statusCodes:
+              200:
+                pattern: ''
+                headers:
+                  Access-Control-Allow-Origin: "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'"
+                  Access-Control-Allow-Methods: "'OPTIONS,POST'"
+                  Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'"
 
   register:
     handler: src/handlers/register.handler
