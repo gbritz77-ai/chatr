@@ -8,13 +8,15 @@
   "license": "ISC",
   "scripts": {
     "dev": "npx serverless offline --stage dev --region eu-west-2",
-    "build": "vite build",
-    "deploy-backend": "node scripts/deploy-and-sync.js",
-    "deploy:full": "node scripts/deploy-and-sync.js",
-    "deploy-frontend": "npm run build && aws s3 sync dist/ s3://outsec-chat-bucket --delete",
-    "deploy": "npm run deploy-backend && npm run deploy-frontend",
-    "remove": "npx serverless remove --stage dev --region eu-west-2",
+
+    "deploy:backend": "echo '\n🚀 Deploying CHATr Backend to AWS (Serverless)...' && npx serverless deploy --stage dev --region eu-west-2",
+
+    "deploy:frontend": "echo '\n🎨 Building and Publishing Amplify Frontend...' && cd frontend && npm run build && amplify publish --yes && cd ..",
+
+    "deploy:all": "echo '\n========================================\n🚀 Deploying CHATr Backend + Amplify Frontend (dev)\n========================================' && echo '🧠 Branch: '$(git rev-parse --abbrev-ref HEAD)' | Commit: '$(git log -1 --pretty=format:'%s (%h)') && npm run deploy:backend && npm run deploy:frontend && echo '\n----------------------------------------\n✅ Deployment Complete!\n🌍 Live URL: https://dev.d3rrkqgvvakfxn.amplifyapp.com\n----------------------------------------'",
+
     "amplify:build": "npm ci && npx amplify pull --yes --env dev --force",
+
     "test": "echo \"No tests yet\""
   },
   "dependencies": {

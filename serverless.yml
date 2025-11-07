@@ -19,11 +19,11 @@ custom:
     noPrependStageInUrl: false
 
   # 🌍 Shared CORS configuration
+  custom:
   cors:
     origins:
       - "https://dev.d3rrkqgvvakfxn.amplifyapp.com"
       - "http://localhost:5173"
-      - "*" # fallback for local testing
     headers:
       - Content-Type
       - Authorization
@@ -36,8 +36,8 @@ custom:
       - GET
       - POST
       - PUT
-      - PATCH
       - DELETE
+      - PATCH
     allowCredentials: false
 
 provider:
