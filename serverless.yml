@@ -151,6 +151,10 @@ functions:
           path: auth
           method: post
           cors: true
+      - http:
+          path: auth
+          method: options
+          cors: true
 
   register:
     handler: src/handlers/register.handler
