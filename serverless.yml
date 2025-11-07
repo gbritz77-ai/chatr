@@ -179,10 +179,6 @@ functions:
           path: messages
           method: any
           cors: true
-      - http:
-          path: messages/unread-counts
-          method: get
-          cors: true
 
   groups:
     handler: src/handlers/groups.handler

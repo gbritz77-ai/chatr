@@ -2,13 +2,11 @@ import React, { useEffect, useState } from "react";
 import { getMembers, API_BASE } from "../lib/api";
 import { Avatar } from "./Avatar";
 import { LogOut, Users, X, Clock, Plus, Edit3 } from "lucide-react";
-import { useTabNotification } from "../hooks/useTabNotification";
 
 export default function Sidebar({ onSelectUser, currentUser }) {
   const [members, setMembers] = useState([]);
   const [groups, setGroups] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
-  const [unreadMap, setUnreadMap] = useState({});
   const [search, setSearch] = useState("");
 
   // group modals
@@ -36,11 +34,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
 
   const profileName = localStorage.getItem("profileName") || currentUser;
 
-  // 🔵 favicon blue-dot (no numbers)
-  const totalUnread = Object.values(unreadMap || {}).reduce((a, b) => a + b, 0);
-  useTabNotification(totalUnread);
-
-  
   /* =========================================================
      Load Members & Groups
   ========================================================= */
@@ -48,7 +41,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     async function loadData() {
       try {
         // members
-         // members
         const res = await getMembers();
         const parsed =
           typeof res === "string"
@@ -99,28 +91,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }, [mySchedule]);
 
   /* =========================================================
-     Unread counts
-  ========================================================= */
-  async function loadUnreadCounts() {
-    try {
-      const res = await fetch(
-        `${API_BASE}/messages/unread-counts?username=${encodeURIComponent(currentUser)}`
-      );
-      const raw = await res.json();
-      const data = typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
-      if (data?.success && data.unreadMap) setUnreadMap(data.unreadMap);
-    } catch (e) {
-      console.error("Unread counts error:", e);
-    }
-  }
-  useEffect(() => {
-    if (!currentUser) return;
-    loadUnreadCounts();
-    const i = setInterval(loadUnreadCounts, 10000);
-    return () => clearInterval(i);
-  }, [currentUser]);
-
-  /* =========================================================
      Helpers
   ========================================================= */
   function checkIfSelfActive(sched) {
@@ -141,19 +111,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       : `CHAT#${[currentUser, otherUser]
           .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
           .join("#")}`;
-
-  async function markRead(chatKey) {
-    try {
-      await fetch(`${API_BASE}/messages/mark-read`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatKey, username: currentUser }),
-      });
-      setUnreadMap((prev) => ({ ...prev, [chatKey]: 0 }));
-    } catch (err) {
-      console.error("markRead failed:", err);
-    }
-  }
 
   async function fetchSchedule(userid) {
     try {
@@ -243,36 +200,28 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         </div>
 
         {groups.length ? (
-          groups.map((g) => {
-            const chatKey = getChatKey("group", g.groupid);
-            const hasUnread = unreadMap[chatKey] > 0;
-            return (
-              <div key={g.groupid} className="flex justify-between items-center py-2 px-3">
-                <button
-                  onClick={() => {
-                    markRead(chatKey);
-                    setActiveChat(`group-${g.groupid}`);
-                    onSelectUser({ type: "group", id: g.groupid, name: g.groupname });
-                  }}
-                  className="flex-1 text-left text-sm flex items-center gap-2"
-                >
-                  {g.groupname}
-                  {hasUnread && (
-                    <span className="w-2 h-2 bg-green-500 rounded-full inline-block" />
-                  )}
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedGroup(g);
-                    setShowManageModal(true);
-                  }}
-                  className="text-gray-500 hover:text-blue-600"
-                >
-                  <Edit3 size={14} />
-                </button>
-              </div>
-            );
-          })
+          groups.map((g) => (
+            <div key={g.groupid} className="flex justify-between items-center py-2 px-3">
+              <button
+                onClick={() => {
+                  setActiveChat(`group-${g.groupid}`);
+                  onSelectUser({ type: "group", id: g.groupid, name: g.groupname });
+                }}
+                className="flex-1 text-left text-sm flex items-center gap-2"
+              >
+                {g.groupname}
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedGroup(g);
+                  setShowManageModal(true);
+                }}
+                className="text-gray-500 hover:text-blue-600"
+              >
+                <Edit3 size={14} />
+              </button>
+            </div>
+          ))
         ) : (
           <p className="text-slate-400 text-xs italic">No groups yet</p>
         )}
@@ -283,29 +232,21 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         <h2 className="font-semibold text-slate-600 text-sm mb-2">👤 Members</h2>
         {members
           .filter((m) => (m.profileName || "").toLowerCase().includes(search.toLowerCase()))
-          .map((m) => {
-            const chatKey = getChatKey("user", null, m.userid);
-            const hasUnread = unreadMap[chatKey] > 0;
-            return (
-              <button
-                key={m.userid}
-                onClick={() => {
-                  markRead(chatKey);
-                  setActiveChat(`user-${m.userid}`);
-                  onSelectUser({ type: "user", id: m.userid, name: m.profileName });
-                }}
-                className="flex justify-between items-center w-full px-3 py-2 text-sm rounded-md hover:bg-gray-50"
-              >
-                <div className="flex items-center gap-3">
-                  <Avatar name={m.profileName} size={2.2} />
-                  <span>{m.profileName}</span>
-                  {hasUnread && (
-                    <span className="w-2 h-2 bg-green-500 rounded-full inline-block" />
-                  )}
-                </div>
-              </button>
-            );
-          })}
+          .map((m) => (
+            <button
+              key={m.userid}
+              onClick={() => {
+                setActiveChat(`user-${m.userid}`);
+                onSelectUser({ type: "user", id: m.userid, name: m.profileName });
+              }}
+              className="flex justify-between items-center w-full px-3 py-2 text-sm rounded-md hover:bg-gray-50"
+            >
+              <div className="flex items-center gap-3">
+                <Avatar name={m.profileName} size={2.2} />
+                <span>{m.profileName}</span>
+              </div>
+            </button>
+          ))}
       </div>
 
       {/* Footer + Time Management */}
