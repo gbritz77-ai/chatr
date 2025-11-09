@@ -1,0 +1,718 @@
+{
+  "swagger" : "2.0",
+  "info" : {
+    "version" : "2025-11-08T06:12:15Z",
+    "title" : "chatr-service-dev"
+  },
+  "host" : "6ideo0rlff.execute-api.eu-west-2.amazonaws.com",
+  "basePath" : "/v2",
+  "schemes" : [ "https" ],
+  "paths" : {
+    "/auth" : {
+      "post" : {
+        "produces" : [ "application/json" ],
+        "responses" : {
+          "200" : {
+            "description" : "200 response",
+            "schema" : {
+              "$ref" : "#/definitions/Empty"
+            },
+            "headers" : {
+              "Access-Control-Allow-Origin" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "x-amazon-apigateway-integration" : {
+          "type" : "aws",
+          "uri" : "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:528757805971:function:chatr-service-dev-auth/invocations",
+          "httpMethod" : "POST",
+          "responses" : {
+            "default" : {
+              "statusCode" : "200",
+              "responseParameters" : {
+                "method.response.header.Access-Control-Allow-Origin" : "'https://dev.d3rrkqgvvakfxn.amplifyapp.com,http://localhost:5173'"
+              }
+            }
+          },
+          "passthroughBehavior" : "when_no_match",
+          "timeoutInMillis" : 29000,
+          "contentHandling" : "CONVERT_TO_TEXT"
+        }
+      },
+      "options" : {
+        "consumes" : [ "application/json" ],
+        "produces" : [ "application/json" ],
+        "responses" : {
+          "200" : {
+            "description" : "200 response",
+            "schema" : {
+              "$ref" : "#/definitions/Empty"
+            },
+            "headers" : {
+              "Access-Control-Allow-Origin" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Methods" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Headers" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "x-amazon-apigateway-integration" : {
+          "type" : "mock",
+          "responses" : {
+            "200" : {
+              "statusCode" : "200",
+              "responseParameters" : {
+                "method.response.header.Access-Control-Allow-Methods" : "'OPTIONS,GET,POST,PUT,PATCH,DELETE'",
+                "method.response.header.Access-Control-Allow-Headers" : "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+                "method.response.header.Access-Control-Allow-Origin" : "'https://dev.d3rrkqgvvakfxn.amplifyapp.com,http://localhost:5173'"
+              }
+            }
+          },
+          "requestTemplates" : {
+            "application/json" : "{\"statusCode\": 200}"
+          },
+          "passthroughBehavior" : "when_no_match"
+        }
+      }
+    },
+    "/groups" : {
+      "options" : {
+        "consumes" : [ "application/json" ],
+        "produces" : [ "application/json" ],
+        "responses" : {
+          "200" : {
+            "description" : "200 response",
+            "headers" : {
+              "Access-Control-Allow-Origin" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Methods" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Headers" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "x-amazon-apigateway-integration" : {
+          "type" : "mock",
+          "responses" : {
+            "default" : {
+              "statusCode" : "200",
+              "responseParameters" : {
+                "method.response.header.Access-Control-Allow-Methods" : "'OPTIONS,GET,POST,PUT,DELETE,PATCH'",
+                "method.response.header.Access-Control-Allow-Headers" : "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+                "method.response.header.Access-Control-Allow-Origin" : "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'"
+              },
+              "responseTemplates" : {
+                "application/json" : "{\"statusCode\":200}"
+              }
+            }
+          },
+          "requestTemplates" : {
+            "application/json" : "{statusCode:200}"
+          },
+          "passthroughBehavior" : "when_no_match",
+          "contentHandling" : "CONVERT_TO_TEXT"
+        }
+      },
+      "x-amazon-apigateway-any-method" : {
+        "responses" : { },
+        "x-amazon-apigateway-integration" : {
+          "type" : "aws_proxy",
+          "uri" : "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:528757805971:function:chatr-service-dev-groups/invocations",
+          "httpMethod" : "POST",
+          "passthroughBehavior" : "when_no_match"
+        }
+      }
+    },
+    "/groups/add" : {
+      "put" : {
+        "responses" : { },
+        "x-amazon-apigateway-integration" : {
+          "type" : "aws_proxy",
+          "uri" : "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:528757805971:function:chatr-service-dev-groups/invocations",
+          "httpMethod" : "POST",
+          "passthroughBehavior" : "when_no_match"
+        }
+      },
+      "options" : {
+        "consumes" : [ "application/json" ],
+        "produces" : [ "application/json" ],
+        "responses" : {
+          "200" : {
+            "description" : "200 response",
+            "headers" : {
+              "Access-Control-Allow-Origin" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Methods" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Headers" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "x-amazon-apigateway-integration" : {
+          "type" : "mock",
+          "responses" : {
+            "default" : {
+              "statusCode" : "200",
+              "responseParameters" : {
+                "method.response.header.Access-Control-Allow-Methods" : "'OPTIONS,GET,POST,PUT,DELETE,PATCH'",
+                "method.response.header.Access-Control-Allow-Headers" : "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+                "method.response.header.Access-Control-Allow-Origin" : "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'"
+              },
+              "responseTemplates" : {
+                "application/json" : "{\"statusCode\":200}"
+              }
+            }
+          },
+          "requestTemplates" : {
+            "application/json" : "{statusCode:200}"
+          },
+          "passthroughBehavior" : "when_no_match",
+          "contentHandling" : "CONVERT_TO_TEXT"
+        }
+      }
+    },
+    "/groups/delete" : {
+      "delete" : {
+        "responses" : { },
+        "x-amazon-apigateway-integration" : {
+          "type" : "aws_proxy",
+          "uri" : "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:528757805971:function:chatr-service-dev-groups/invocations",
+          "httpMethod" : "POST",
+          "passthroughBehavior" : "when_no_match"
+        }
+      },
+      "options" : {
+        "consumes" : [ "application/json" ],
+        "produces" : [ "application/json" ],
+        "responses" : {
+          "200" : {
+            "description" : "200 response",
+            "headers" : {
+              "Access-Control-Allow-Origin" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Methods" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Headers" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "x-amazon-apigateway-integration" : {
+          "type" : "mock",
+          "responses" : {
+            "default" : {
+              "statusCode" : "200",
+              "responseParameters" : {
+                "method.response.header.Access-Control-Allow-Methods" : "'OPTIONS,GET,POST,PUT,DELETE,PATCH'",
+                "method.response.header.Access-Control-Allow-Headers" : "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+                "method.response.header.Access-Control-Allow-Origin" : "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'"
+              },
+              "responseTemplates" : {
+                "application/json" : "{\"statusCode\":200}"
+              }
+            }
+          },
+          "requestTemplates" : {
+            "application/json" : "{statusCode:200}"
+          },
+          "passthroughBehavior" : "when_no_match",
+          "contentHandling" : "CONVERT_TO_TEXT"
+        }
+      }
+    },
+    "/groups/remove" : {
+      "put" : {
+        "responses" : { },
+        "x-amazon-apigateway-integration" : {
+          "type" : "aws_proxy",
+          "uri" : "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:528757805971:function:chatr-service-dev-groups/invocations",
+          "httpMethod" : "POST",
+          "passthroughBehavior" : "when_no_match"
+        }
+      },
+      "options" : {
+        "consumes" : [ "application/json" ],
+        "produces" : [ "application/json" ],
+        "responses" : {
+          "200" : {
+            "description" : "200 response",
+            "headers" : {
+              "Access-Control-Allow-Origin" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Methods" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Headers" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "x-amazon-apigateway-integration" : {
+          "type" : "mock",
+          "responses" : {
+            "default" : {
+              "statusCode" : "200",
+              "responseParameters" : {
+                "method.response.header.Access-Control-Allow-Methods" : "'OPTIONS,GET,POST,PUT,DELETE,PATCH'",
+                "method.response.header.Access-Control-Allow-Headers" : "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+                "method.response.header.Access-Control-Allow-Origin" : "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'"
+              },
+              "responseTemplates" : {
+                "application/json" : "{\"statusCode\":200}"
+              }
+            }
+          },
+          "requestTemplates" : {
+            "application/json" : "{statusCode:200}"
+          },
+          "passthroughBehavior" : "when_no_match",
+          "contentHandling" : "CONVERT_TO_TEXT"
+        }
+      }
+    },
+    "/members" : {
+      "options" : {
+        "consumes" : [ "application/json" ],
+        "produces" : [ "application/json" ],
+        "responses" : {
+          "200" : {
+            "description" : "200 response",
+            "headers" : {
+              "Access-Control-Allow-Origin" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Methods" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Headers" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "x-amazon-apigateway-integration" : {
+          "type" : "mock",
+          "responses" : {
+            "default" : {
+              "statusCode" : "200",
+              "responseParameters" : {
+                "method.response.header.Access-Control-Allow-Methods" : "'OPTIONS,GET,POST,PUT,DELETE,PATCH'",
+                "method.response.header.Access-Control-Allow-Headers" : "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+                "method.response.header.Access-Control-Allow-Origin" : "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'"
+              },
+              "responseTemplates" : {
+                "application/json" : "{\"statusCode\":200}"
+              }
+            }
+          },
+          "requestTemplates" : {
+            "application/json" : "{statusCode:200}"
+          },
+          "passthroughBehavior" : "when_no_match",
+          "contentHandling" : "CONVERT_TO_TEXT"
+        }
+      },
+      "x-amazon-apigateway-any-method" : {
+        "responses" : { },
+        "x-amazon-apigateway-integration" : {
+          "type" : "aws_proxy",
+          "uri" : "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:528757805971:function:chatr-service-dev-members/invocations",
+          "httpMethod" : "POST",
+          "passthroughBehavior" : "when_no_match"
+        }
+      }
+    },
+    "/messages" : {
+      "options" : {
+        "consumes" : [ "application/json" ],
+        "produces" : [ "application/json" ],
+        "responses" : {
+          "200" : {
+            "description" : "200 response",
+            "headers" : {
+              "Access-Control-Allow-Origin" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Methods" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Headers" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "x-amazon-apigateway-integration" : {
+          "type" : "mock",
+          "responses" : {
+            "default" : {
+              "statusCode" : "200",
+              "responseParameters" : {
+                "method.response.header.Access-Control-Allow-Methods" : "'OPTIONS,GET,POST,PUT,DELETE,PATCH'",
+                "method.response.header.Access-Control-Allow-Headers" : "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+                "method.response.header.Access-Control-Allow-Origin" : "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'"
+              },
+              "responseTemplates" : {
+                "application/json" : "{\"statusCode\":200}"
+              }
+            }
+          },
+          "requestTemplates" : {
+            "application/json" : "{statusCode:200}"
+          },
+          "passthroughBehavior" : "when_no_match",
+          "contentHandling" : "CONVERT_TO_TEXT"
+        }
+      },
+      "x-amazon-apigateway-any-method" : {
+        "responses" : { },
+        "x-amazon-apigateway-integration" : {
+          "type" : "aws_proxy",
+          "uri" : "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:528757805971:function:chatr-service-dev-messages/invocations",
+          "httpMethod" : "POST",
+          "passthroughBehavior" : "when_no_match"
+        }
+      }
+    },
+    "/presign-download" : {
+      "post" : {
+        "responses" : { },
+        "x-amazon-apigateway-integration" : {
+          "type" : "aws_proxy",
+          "uri" : "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:528757805971:function:chatr-service-dev-presignDownload/invocations",
+          "httpMethod" : "POST",
+          "passthroughBehavior" : "when_no_match"
+        }
+      },
+      "options" : {
+        "consumes" : [ "application/json" ],
+        "produces" : [ "application/json" ],
+        "responses" : {
+          "200" : {
+            "description" : "200 response",
+            "headers" : {
+              "Access-Control-Allow-Origin" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Methods" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Headers" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "x-amazon-apigateway-integration" : {
+          "type" : "mock",
+          "responses" : {
+            "default" : {
+              "statusCode" : "200",
+              "responseParameters" : {
+                "method.response.header.Access-Control-Allow-Methods" : "'OPTIONS,GET,POST,PUT,DELETE,PATCH'",
+                "method.response.header.Access-Control-Allow-Headers" : "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+                "method.response.header.Access-Control-Allow-Origin" : "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'"
+              },
+              "responseTemplates" : {
+                "application/json" : "{\"statusCode\":200}"
+              }
+            }
+          },
+          "requestTemplates" : {
+            "application/json" : "{statusCode:200}"
+          },
+          "passthroughBehavior" : "when_no_match",
+          "contentHandling" : "CONVERT_TO_TEXT"
+        }
+      }
+    },
+    "/presign-upload" : {
+      "post" : {
+        "responses" : { },
+        "x-amazon-apigateway-integration" : {
+          "type" : "aws_proxy",
+          "uri" : "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:528757805971:function:chatr-service-dev-presignUpload/invocations",
+          "httpMethod" : "POST",
+          "passthroughBehavior" : "when_no_match"
+        }
+      },
+      "options" : {
+        "consumes" : [ "application/json" ],
+        "produces" : [ "application/json" ],
+        "responses" : {
+          "200" : {
+            "description" : "200 response",
+            "headers" : {
+              "Access-Control-Allow-Origin" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Methods" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Headers" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "x-amazon-apigateway-integration" : {
+          "type" : "mock",
+          "responses" : {
+            "default" : {
+              "statusCode" : "200",
+              "responseParameters" : {
+                "method.response.header.Access-Control-Allow-Methods" : "'OPTIONS,GET,POST,PUT,DELETE,PATCH'",
+                "method.response.header.Access-Control-Allow-Headers" : "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+                "method.response.header.Access-Control-Allow-Origin" : "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'"
+              },
+              "responseTemplates" : {
+                "application/json" : "{\"statusCode\":200}"
+              }
+            }
+          },
+          "requestTemplates" : {
+            "application/json" : "{statusCode:200}"
+          },
+          "passthroughBehavior" : "when_no_match",
+          "contentHandling" : "CONVERT_TO_TEXT"
+        }
+      }
+    },
+    "/typing" : {
+      "get" : {
+        "responses" : { },
+        "x-amazon-apigateway-integration" : {
+          "type" : "aws_proxy",
+          "uri" : "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:528757805971:function:chatr-service-dev-typing/invocations",
+          "httpMethod" : "POST",
+          "passthroughBehavior" : "when_no_match"
+        }
+      },
+      "options" : {
+        "consumes" : [ "application/json" ],
+        "produces" : [ "application/json" ],
+        "responses" : {
+          "200" : {
+            "description" : "200 response",
+            "headers" : {
+              "Access-Control-Allow-Origin" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Methods" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Headers" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "x-amazon-apigateway-integration" : {
+          "type" : "mock",
+          "responses" : {
+            "default" : {
+              "statusCode" : "200",
+              "responseParameters" : {
+                "method.response.header.Access-Control-Allow-Methods" : "'OPTIONS,GET,POST,PUT,DELETE,PATCH'",
+                "method.response.header.Access-Control-Allow-Headers" : "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+                "method.response.header.Access-Control-Allow-Origin" : "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'"
+              },
+              "responseTemplates" : {
+                "application/json" : "{\"statusCode\":200}"
+              }
+            }
+          },
+          "requestTemplates" : {
+            "application/json" : "{statusCode:200}"
+          },
+          "passthroughBehavior" : "when_no_match",
+          "contentHandling" : "CONVERT_TO_TEXT"
+        }
+      }
+    },
+    "/typing/start" : {
+      "post" : {
+        "responses" : { },
+        "x-amazon-apigateway-integration" : {
+          "type" : "aws_proxy",
+          "uri" : "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:528757805971:function:chatr-service-dev-typing/invocations",
+          "httpMethod" : "POST",
+          "passthroughBehavior" : "when_no_match"
+        }
+      },
+      "options" : {
+        "consumes" : [ "application/json" ],
+        "produces" : [ "application/json" ],
+        "responses" : {
+          "200" : {
+            "description" : "200 response",
+            "headers" : {
+              "Access-Control-Allow-Origin" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Methods" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Headers" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "x-amazon-apigateway-integration" : {
+          "type" : "mock",
+          "responses" : {
+            "default" : {
+              "statusCode" : "200",
+              "responseParameters" : {
+                "method.response.header.Access-Control-Allow-Methods" : "'OPTIONS,GET,POST,PUT,DELETE,PATCH'",
+                "method.response.header.Access-Control-Allow-Headers" : "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+                "method.response.header.Access-Control-Allow-Origin" : "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'"
+              },
+              "responseTemplates" : {
+                "application/json" : "{\"statusCode\":200}"
+              }
+            }
+          },
+          "requestTemplates" : {
+            "application/json" : "{statusCode:200}"
+          },
+          "passthroughBehavior" : "when_no_match",
+          "contentHandling" : "CONVERT_TO_TEXT"
+        }
+      }
+    },
+    "/typing/stop" : {
+      "post" : {
+        "responses" : { },
+        "x-amazon-apigateway-integration" : {
+          "type" : "aws_proxy",
+          "uri" : "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:528757805971:function:chatr-service-dev-typing/invocations",
+          "httpMethod" : "POST",
+          "passthroughBehavior" : "when_no_match"
+        }
+      },
+      "options" : {
+        "consumes" : [ "application/json" ],
+        "produces" : [ "application/json" ],
+        "responses" : {
+          "200" : {
+            "description" : "200 response",
+            "headers" : {
+              "Access-Control-Allow-Origin" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Methods" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Headers" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "x-amazon-apigateway-integration" : {
+          "type" : "mock",
+          "responses" : {
+            "default" : {
+              "statusCode" : "200",
+              "responseParameters" : {
+                "method.response.header.Access-Control-Allow-Methods" : "'OPTIONS,GET,POST,PUT,DELETE,PATCH'",
+                "method.response.header.Access-Control-Allow-Headers" : "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+                "method.response.header.Access-Control-Allow-Origin" : "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'"
+              },
+              "responseTemplates" : {
+                "application/json" : "{\"statusCode\":200}"
+              }
+            }
+          },
+          "requestTemplates" : {
+            "application/json" : "{statusCode:200}"
+          },
+          "passthroughBehavior" : "when_no_match",
+          "contentHandling" : "CONVERT_TO_TEXT"
+        }
+      }
+    },
+    "/work-schedule" : {
+      "options" : {
+        "consumes" : [ "application/json" ],
+        "produces" : [ "application/json" ],
+        "responses" : {
+          "200" : {
+            "description" : "200 response",
+            "headers" : {
+              "Access-Control-Allow-Origin" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Methods" : {
+                "type" : "string"
+              },
+              "Access-Control-Allow-Headers" : {
+                "type" : "string"
+              }
+            }
+          }
+        },
+        "x-amazon-apigateway-integration" : {
+          "type" : "mock",
+          "responses" : {
+            "default" : {
+              "statusCode" : "200",
+              "responseParameters" : {
+                "method.response.header.Access-Control-Allow-Methods" : "'OPTIONS,GET,POST,PUT,DELETE,PATCH'",
+                "method.response.header.Access-Control-Allow-Headers" : "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
+                "method.response.header.Access-Control-Allow-Origin" : "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'"
+              },
+              "responseTemplates" : {
+                "application/json" : "{\"statusCode\":200}"
+              }
+            }
+          },
+          "requestTemplates" : {
+            "application/json" : "{statusCode:200}"
+          },
+          "passthroughBehavior" : "when_no_match",
+          "contentHandling" : "CONVERT_TO_TEXT"
+        }
+      },
+      "x-amazon-apigateway-any-method" : {
+        "responses" : { },
+        "x-amazon-apigateway-integration" : {
+          "type" : "aws_proxy",
+          "uri" : "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:528757805971:function:chatr-service-dev-workSchedule/invocations",
+          "httpMethod" : "POST",
+          "passthroughBehavior" : "when_no_match"
+        }
+      }
+    }
+  },
+  "definitions" : {
+    "Empty" : {
+      "type" : "object",
+      "title" : "Empty Schema"
+    }
+  },
+  "x-amazon-apigateway-minimum-compression-size" : 1024,
+  "x-amazon-apigateway-binary-media-types" : [ "*/*" ]
+}

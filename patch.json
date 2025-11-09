@@ -1,0 +1,12 @@
+[
+  {
+    "op": "replace",
+    "path": "/accessLogSettings/destinationArn",
+    "value": "arn:aws:logs:eu-west-2:528757805971:log-group:/aws/apigateway/chatr-v2"
+  },
+  {
+    "op": "replace",
+    "path": "/accessLogSettings/format",
+    "value": "{\"requestId\":\"$context.requestId\",\"status\":\"$context.status\",\"error\":\"$context.error.message\",\"integrationError\":\"$context.integration.error\",\"integrationStatus\":\"$context.integration.status\"}"
+  }
+]
