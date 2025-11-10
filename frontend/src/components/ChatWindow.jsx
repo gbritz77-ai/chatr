@@ -214,56 +214,35 @@ async function loadMessages() {
     text: text.trim(),
   };
 
-  // 🔹 Handle attachments
+  // Handle attachment if any
   if (attachment) {
-    payload.attachmentKey =
-      attachment.key || attachment.url || attachment.name || null;
-    payload.attachmentType = attachment.type || "file";
+    payload.attachmentUrl = attachment.url || null;
   }
 
+  // Always build chatId explicitly
   if (activeUser?.type === "user") {
     const userB = activeUser.username || activeUser.id;
-    payload.chatId = normalizeChatId(currentUser, userB);
+    payload.chatId = `CHAT#${currentUser}#${userB}`;
   }
+
+  console.log("📨 Sending payload to /messages:", payload);
 
   try {
-    setUploading(true);
-
-    // 📨 Send to backend
     const res = await postJSON("/messages", payload);
-    let data = res;
+    console.log("📬 Send response:", res);
 
-    // ✅ Parse body if wrapped by API Gateway
-    if (typeof res?.body === "string") {
-      try {
-        data = JSON.parse(res.body);
-      } catch (err) {
-        console.error("❌ Failed to parse res.body JSON:", err, res.body);
-      }
-    }
-
-    console.log("📤 Send message response:", data);
-
-    // ✅ Optimistically append message (instant feedback)
-    if (data?.success && data?.item) {
-      setMessages((prev) => [...prev, data.item]);
-    } else if (data?.item) {
-      // fallback if success flag missing but item exists
-      setMessages((prev) => [...prev, data.item]);
+    if (res.success) {
+      setMessages((prev) => [...prev, res.item]);
+      setText("");
+      setAttachment(null);
     } else {
-      console.warn("⚠️ No item returned from backend:", data);
+      console.error("❌ Message send failed:", res.message);
     }
-
-    // ✅ Reset fields
-    setText("");
-    setAttachment(null);
-    await markAsRead();
   } catch (err) {
-    console.error("❌ sendMessage error:", err);
-  } finally {
-    setUploading(false);
+    console.error("🔥 sendMessage error:", err);
   }
 }
+
 
 
   /* ----------------------------------------------------
