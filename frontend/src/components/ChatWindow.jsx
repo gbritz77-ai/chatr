@@ -69,53 +69,31 @@ export default function ChatWindow({ activeUser, currentUser }) {
   /* ----------------------------------------------------
      LOAD MESSAGES
   ---------------------------------------------------- */
-  /* ----------------------------------------------------
-   LOAD MESSAGES (Fixed for API Gateway JSON wrapping)
----------------------------------------------------- */
-async function loadMessages() {
-  if (!activeUser || !currentUser) return;
+  async function loadMessages() {
+    if (!activeUser || !currentUser) return;
 
-  try {
-    let url = "";
-    if (activeUser?.type === "group") {
-      url = `/messages?groupid=${encodeURIComponent(activeUser.id)}`;
-    } else if (activeUser?.type === "user") {
-      const userB = activeUser.username || activeUser.id;
-      const chatId = normalizeChatId(currentUser, userB);
-      url = `/messages?chatId=${encodeURIComponent(chatId)}`;
-    }
-
-    if (!url) return;
-
-    const res = await getJSON(url);
-    let data = res;
-
-    // ✅ Handle API Gateway wrapping — unwrap JSON if inside "body"
-    if (typeof res?.body === "string") {
-      try {
-        data = JSON.parse(res.body);
-      } catch (err) {
-        console.error("❌ Failed to parse res.body JSON:", err, res.body);
+    try {
+      let url = "";
+      if (activeUser?.type === "group") {
+        url = `/messages?groupid=${encodeURIComponent(activeUser.id)}`;
+      } else if (activeUser?.type === "user") {
+        const userB = activeUser.username || activeUser.id;
+        const chatId = normalizeChatId(currentUser, userB);
+        url = `/messages?chatId=${encodeURIComponent(chatId)}`;
       }
-    }
 
-    console.log("📨 Loaded messages response:", data);
+      if (!url) return;
 
-    // ✅ Support both .messages and .items array keys
-    if (Array.isArray(data.messages)) {
-      setMessages(data.messages);
-    } else if (Array.isArray(data.items)) {
-      setMessages(data.items);
-    } else {
-      console.warn("⚠️ No messages array found in response:", data);
-      setMessages([]);
+      const res = await getJSON(url);
+      if (res?.success && Array.isArray(res.messages)) {
+        setMessages(res.messages);
+      } else {
+        setMessages([]);
+      }
+    } catch (err) {
+      console.error("❌ Error loading messages:", err);
     }
-  } catch (err) {
-    console.error("❌ Error loading messages:", err);
-    setMessages([]);
   }
-}
-
 
   useEffect(() => {
     if (!activeUser || !currentUser) return;
@@ -200,47 +178,64 @@ async function loadMessages() {
   /* ----------------------------------------------------
      SEND MESSAGE
   ---------------------------------------------------- */
-  async function sendMessage(e) {
-    e.preventDefault();
-    if (!text.trim() && !attachment) return;
+  /* ----------------------------------------------------
+   SEND MESSAGE (fixed for wrapped Lambda response)
+---------------------------------------------------- */
+async function sendMessage(e) {
+  e.preventDefault();
+  if (!text.trim() && !attachment) return;
 
-    const payload = {
-      sender: currentUser,
-      recipient: activeUser?.username || null,
-      groupid: activeUser?.type === "group" ? activeUser.id : null,
-      text: text.trim(),
-    };
+  const payload = {
+    sender: currentUser,
+    recipient: activeUser?.username || null,
+    groupid: activeUser?.type === "group" ? activeUser.id : null,
+    text: text.trim(),
+  };
 
-    // 🔹 Attachments handled directly (no upload API)
-    if (attachment) {
-      payload.attachmentKey =
-        attachment.key || attachment.url || attachment.name || null;
-      payload.attachmentType = attachment.type || "file";
-    }
-
-    if (activeUser?.type === "user") {
-      const userB = activeUser.username || activeUser.id;
-      payload.chatId = normalizeChatId(currentUser, userB);
-    }
-
-    try {
-      setUploading(true);
-      const res = await postJSON("/messages", payload);
-
-      if (res.success) {
-        setMessages((prev) => [...prev, res.item]);
-        setText("");
-        setAttachment(null);
-        await markAsRead();
-      } else {
-        console.error("❌ Message send failed:", res);
-      }
-    } catch (err) {
-      console.error("❌ sendMessage error:", err);
-    } finally {
-      setUploading(false);
-    }
+  // 🔹 Attachments handled directly (no upload API)
+  if (attachment) {
+    payload.attachmentKey =
+      attachment.key || attachment.url || attachment.name || null;
+    payload.attachmentType = attachment.type || "file";
   }
+
+  if (activeUser?.type === "user") {
+    const userB = activeUser.username || activeUser.id;
+    payload.chatId = normalizeChatId(currentUser, userB);
+  }
+
+  try {
+    setUploading(true);
+
+    const res = await postJSON("/messages", payload);
+    let data = res;
+
+    // ✅ Parse API Gateway "body" wrapper if necessary
+    if (typeof res?.body === "string") {
+      try {
+        data = JSON.parse(res.body);
+      } catch (err) {
+        console.error("❌ Failed to parse res.body:", err, res.body);
+      }
+    }
+
+    console.log("📤 Send message response:", data);
+
+    if (data?.success && data?.item) {
+      setMessages((prev) => [...prev, data.item]);
+      setText("");
+      setAttachment(null);
+      await markAsRead();
+    } else {
+      console.warn("⚠️ Message send failed:", data);
+    }
+  } catch (err) {
+    console.error("❌ sendMessage error:", err);
+  } finally {
+    setUploading(false);
+  }
+}
+
 
   /* ----------------------------------------------------
      GUARD RENDER IF NO ACTIVE USER
