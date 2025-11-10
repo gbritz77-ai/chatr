@@ -178,64 +178,47 @@ export default function ChatWindow({ activeUser, currentUser }) {
   /* ----------------------------------------------------
      SEND MESSAGE
   ---------------------------------------------------- */
-  /* ----------------------------------------------------
-   SEND MESSAGE (fixed for wrapped Lambda response)
----------------------------------------------------- */
-async function sendMessage(e) {
-  e.preventDefault();
-  if (!text.trim() && !attachment) return;
+  async function sendMessage(e) {
+    e.preventDefault();
+    if (!text.trim() && !attachment) return;
 
-  const payload = {
-    sender: currentUser,
-    recipient: activeUser?.username || null,
-    groupid: activeUser?.type === "group" ? activeUser.id : null,
-    text: text.trim(),
-  };
+    const payload = {
+      sender: currentUser,
+      recipient: activeUser?.username || null,
+      groupid: activeUser?.type === "group" ? activeUser.id : null,
+      text: text.trim(),
+    };
 
-  // 🔹 Attachments handled directly (no upload API)
-  if (attachment) {
-    payload.attachmentKey =
-      attachment.key || attachment.url || attachment.name || null;
-    payload.attachmentType = attachment.type || "file";
-  }
+    // 🔹 Attachments handled directly (no upload API)
+    if (attachment) {
+      payload.attachmentKey =
+        attachment.key || attachment.url || attachment.name || null;
+      payload.attachmentType = attachment.type || "file";
+    }
 
-  if (activeUser?.type === "user") {
-    const userB = activeUser.username || activeUser.id;
-    payload.chatId = normalizeChatId(currentUser, userB);
-  }
+    if (activeUser?.type === "user") {
+      const userB = activeUser.username || activeUser.id;
+      payload.chatId = normalizeChatId(currentUser, userB);
+    }
 
-  try {
-    setUploading(true);
+    try {
+      setUploading(true);
+      const res = await postJSON("/messages", payload);
 
-    const res = await postJSON("/messages", payload);
-    let data = res;
-
-    // ✅ Parse API Gateway "body" wrapper if necessary
-    if (typeof res?.body === "string") {
-      try {
-        data = JSON.parse(res.body);
-      } catch (err) {
-        console.error("❌ Failed to parse res.body:", err, res.body);
+      if (res.success) {
+        setMessages((prev) => [...prev, res.item]);
+        setText("");
+        setAttachment(null);
+        await markAsRead();
+      } else {
+        console.error("❌ Message send failed:", res);
       }
+    } catch (err) {
+      console.error("❌ sendMessage error:", err);
+    } finally {
+      setUploading(false);
     }
-
-    console.log("📤 Send message response:", data);
-
-    if (data?.success && data?.item) {
-      setMessages((prev) => [...prev, data.item]);
-      setText("");
-      setAttachment(null);
-      await markAsRead();
-    } else {
-      console.warn("⚠️ Message send failed:", data);
-    }
-  } catch (err) {
-    console.error("❌ sendMessage error:", err);
-  } finally {
-    setUploading(false);
   }
-}
-
 
   /* ----------------------------------------------------
      GUARD RENDER IF NO ACTIVE USER
