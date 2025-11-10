@@ -69,31 +69,53 @@ export default function ChatWindow({ activeUser, currentUser }) {
   /* ----------------------------------------------------
      LOAD MESSAGES
   ---------------------------------------------------- */
-  async function loadMessages() {
-    if (!activeUser || !currentUser) return;
+  /* ----------------------------------------------------
+   LOAD MESSAGES (Fixed for API Gateway JSON wrapping)
+---------------------------------------------------- */
+async function loadMessages() {
+  if (!activeUser || !currentUser) return;
 
-    try {
-      let url = "";
-      if (activeUser?.type === "group") {
-        url = `/messages?groupid=${encodeURIComponent(activeUser.id)}`;
-      } else if (activeUser?.type === "user") {
-        const userB = activeUser.username || activeUser.id;
-        const chatId = normalizeChatId(currentUser, userB);
-        url = `/messages?chatId=${encodeURIComponent(chatId)}`;
-      }
-
-      if (!url) return;
-
-      const res = await getJSON(url);
-      if (res?.success && Array.isArray(res.messages)) {
-        setMessages(res.messages);
-      } else {
-        setMessages([]);
-      }
-    } catch (err) {
-      console.error("❌ Error loading messages:", err);
+  try {
+    let url = "";
+    if (activeUser?.type === "group") {
+      url = `/messages?groupid=${encodeURIComponent(activeUser.id)}`;
+    } else if (activeUser?.type === "user") {
+      const userB = activeUser.username || activeUser.id;
+      const chatId = normalizeChatId(currentUser, userB);
+      url = `/messages?chatId=${encodeURIComponent(chatId)}`;
     }
+
+    if (!url) return;
+
+    const res = await getJSON(url);
+    let data = res;
+
+    // ✅ Handle API Gateway wrapping — unwrap JSON if inside "body"
+    if (typeof res?.body === "string") {
+      try {
+        data = JSON.parse(res.body);
+      } catch (err) {
+        console.error("❌ Failed to parse res.body JSON:", err, res.body);
+      }
+    }
+
+    console.log("📨 Loaded messages response:", data);
+
+    // ✅ Support both .messages and .items array keys
+    if (Array.isArray(data.messages)) {
+      setMessages(data.messages);
+    } else if (Array.isArray(data.items)) {
+      setMessages(data.items);
+    } else {
+      console.warn("⚠️ No messages array found in response:", data);
+      setMessages([]);
+    }
+  } catch (err) {
+    console.error("❌ Error loading messages:", err);
+    setMessages([]);
   }
+}
+
 
   useEffect(() => {
     if (!activeUser || !currentUser) return;
