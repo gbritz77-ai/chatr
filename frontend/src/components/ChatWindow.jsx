@@ -204,46 +204,67 @@ async function loadMessages() {
      SEND MESSAGE
   ---------------------------------------------------- */
   async function sendMessage(e) {
-    e.preventDefault();
-    if (!text.trim() && !attachment) return;
+  e.preventDefault();
+  if (!text.trim() && !attachment) return;
 
-    const payload = {
-      sender: currentUser,
-      recipient: activeUser?.username || null,
-      groupid: activeUser?.type === "group" ? activeUser.id : null,
-      text: text.trim(),
-    };
+  const payload = {
+    sender: currentUser,
+    recipient: activeUser?.username || null,
+    groupid: activeUser?.type === "group" ? activeUser.id : null,
+    text: text.trim(),
+  };
 
-    // 🔹 Attachments handled directly (no upload API)
-    if (attachment) {
-      payload.attachmentKey =
-        attachment.key || attachment.url || attachment.name || null;
-      payload.attachmentType = attachment.type || "file";
-    }
-
-    if (activeUser?.type === "user") {
-      const userB = activeUser.username || activeUser.id;
-      payload.chatId = normalizeChatId(currentUser, userB);
-    }
-
-    try {
-      setUploading(true);
-      const res = await postJSON("/messages", payload);
-
-      if (res.success) {
-        setMessages((prev) => [...prev, res.item]);
-        setText("");
-        setAttachment(null);
-        await markAsRead();
-      } else {
-        console.error("❌ Message send failed:", res);
-      }
-    } catch (err) {
-      console.error("❌ sendMessage error:", err);
-    } finally {
-      setUploading(false);
-    }
+  // 🔹 Handle attachments
+  if (attachment) {
+    payload.attachmentKey =
+      attachment.key || attachment.url || attachment.name || null;
+    payload.attachmentType = attachment.type || "file";
   }
+
+  if (activeUser?.type === "user") {
+    const userB = activeUser.username || activeUser.id;
+    payload.chatId = normalizeChatId(currentUser, userB);
+  }
+
+  try {
+    setUploading(true);
+
+    // 📨 Send to backend
+    const res = await postJSON("/messages", payload);
+    let data = res;
+
+    // ✅ Parse body if wrapped by API Gateway
+    if (typeof res?.body === "string") {
+      try {
+        data = JSON.parse(res.body);
+      } catch (err) {
+        console.error("❌ Failed to parse res.body JSON:", err, res.body);
+      }
+    }
+
+    console.log("📤 Send message response:", data);
+
+    // ✅ Optimistically append message (instant feedback)
+    if (data?.success && data?.item) {
+      setMessages((prev) => [...prev, data.item]);
+    } else if (data?.item) {
+      // fallback if success flag missing but item exists
+      setMessages((prev) => [...prev, data.item]);
+    } else {
+      console.warn("⚠️ No item returned from backend:", data);
+    }
+
+    // ✅ Reset fields
+    setText("");
+    setAttachment(null);
+    await markAsRead();
+  } catch (err) {
+    console.error("❌ sendMessage error:", err);
+  } finally {
+    setUploading(false);
+  }
+}
+
 
   /* ----------------------------------------------------
      GUARD RENDER IF NO ACTIVE USER
