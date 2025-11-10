@@ -6,7 +6,7 @@
 // Pull raw value from Vite env
 let rawBase = import.meta.env.VITE_API_BASE || "";
 
-// 🧹 Sanitize any accidental prefix (e.g., "VITE_API_BASE=https://...")
+// 🧹 Sanitize any accidental prefix
 let base = rawBase.replace(/^VITE_API_BASE=/, "").trim();
 
 // Environment detection
@@ -26,7 +26,7 @@ if (!base) {
   console.log("🧩 Using VITE_API_BASE override:", base);
 }
 
-// Normalize (remove trailing slashes)
+// Normalize trailing slashes
 export const API_BASE = base.replace(/\/+$/, "");
 
 // Debug log
@@ -38,7 +38,7 @@ console.log("• Final API_BASE:", API_BASE);
 console.groupEnd();
 
 // ==========================================================
-// 🧰 URL Builder (ensures exactly one slash between base & path)
+// 🧰 URL Builder
 // ==========================================================
 function buildUrl(path) {
   if (!path.startsWith("/")) path = `/${path}`;
@@ -52,7 +52,6 @@ function buildUrl(path) {
 // ==========================================================
 export async function getJSON(path) {
   const url = buildUrl(path);
-
   const res = await fetch(url, {
     method: "GET",
     mode: "cors",
@@ -60,16 +59,20 @@ export async function getJSON(path) {
   });
 
   const text = await res.text();
-
   if (!res.ok) {
     console.error(`❌ GET ${url} failed: ${res.status} ${res.statusText}`);
     throw new Error(`HTTP ${res.status} ${res.statusText}`);
   }
 
   try {
-    return JSON.parse(text || "{}");
-  } catch {
-    console.warn(`⚠️ Non-JSON response from ${url}`);
+    const parsed = JSON.parse(text || "{}");
+    // ✅ Handle wrapped responses
+    if (typeof parsed?.body === "string") {
+      return JSON.parse(parsed.body);
+    }
+    return parsed;
+  } catch (err) {
+    console.warn(`⚠️ Non-JSON response from ${url}`, text);
     return {};
   }
 }
@@ -79,7 +82,6 @@ export async function getJSON(path) {
 // ==========================================================
 export async function postJSON(path, body) {
   const url = buildUrl(path);
-
   const res = await fetch(url, {
     method: "POST",
     mode: "cors",
@@ -88,16 +90,20 @@ export async function postJSON(path, body) {
   });
 
   const text = await res.text();
-
   if (!res.ok) {
     console.error(`❌ POST ${url} failed: ${res.status} ${res.statusText}`);
     throw new Error(`HTTP ${res.status} ${res.statusText}`);
   }
 
   try {
-    return JSON.parse(text || "{}");
-  } catch {
-    console.warn(`⚠️ Non-JSON response from ${url}`);
+    const parsed = JSON.parse(text || "{}");
+    // ✅ Handle API Gateway "body" wrapper
+    if (typeof parsed?.body === "string") {
+      return JSON.parse(parsed.body);
+    }
+    return parsed;
+  } catch (err) {
+    console.warn(`⚠️ Non-JSON response from ${url}`, text);
     return {};
   }
 }
