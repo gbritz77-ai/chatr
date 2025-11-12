@@ -204,30 +204,42 @@ async function loadMessages() {
   }, [messages]);
 
   /* ----------------------------------------------------
-     SEND MESSAGE
-  ---------------------------------------------------- */
-  async function sendMessage(e) {
+   SEND MESSAGE — Final Fixed Version (Nov 2025)
+---------------------------------------------------- */
+async function sendMessage(e) {
   e.preventDefault();
   console.log("🟢 sendMessage() triggered");
-  if (!text.trim() && !attachment) return;
-   console.warn("⚠️ No message text or attachment — skipping send");
 
+  if (!text.trim() && !attachment) {
+    console.log("ℹ️ Empty message — nothing to send");
+    return;
+  }
+
+  // ✅ Resolve correct recipient value
+  const recipientValue =
+    activeUser?.type === "user"
+      ? activeUser.username || activeUser.id || activeUser.email
+      : null;
+
+  // ✅ Base payload
   const payload = {
     sender: currentUser,
-    recipient: activeUser?.username || null,
+    recipient: recipientValue,
     groupid: activeUser?.type === "group" ? activeUser.id : null,
     text: text.trim(),
   };
 
-  // Handle attachment if any
+  // ✅ Handle attachment
   if (attachment) {
     payload.attachmentUrl = attachment.url || null;
   }
 
-  // Always build chatId explicitly
-  if (activeUser?.type === "user") {
-    const userB = activeUser.username || activeUser.id;
-    payload.chatId = `CHAT#${currentUser}#${userB}`;
+  // ✅ Normalized chatId (alphabetically sorted & lowercased)
+  if (activeUser?.type === "user" && recipientValue) {
+    const sorted = [currentUser.toLowerCase(), recipientValue.toLowerCase()].sort();
+    payload.chatId = `CHAT#${sorted[0]}#${sorted[1]}`;
+  } else if (activeUser?.type === "group") {
+    payload.chatId = `GROUP#${activeUser.id}`;
   }
 
   console.log("📨 Sending payload to /messages:", payload);
@@ -236,17 +248,18 @@ async function loadMessages() {
     const res = await postJSON("/messages", payload);
     console.log("📬 Send response:", res);
 
-    if (res.success) {
+    if (res.success && res.item) {
+      // ✅ Instantly show new message in chat
       setMessages((prev) => [...prev, res.item]);
 
+      // ✅ Reset input fields
       setText("");
       setAttachment(null);
 
-      // ✅ Slight delay before refreshing from DynamoDB
-    setTimeout(() => {
-    loadMessages(); // ensures consistency
-    
-  }, 800);
+      // ✅ Reload to ensure sync with DynamoDB (handles eventual consistency)
+      setTimeout(() => {
+        loadMessages();
+      }, 800);
     } else {
       console.error("❌ Message send failed:", res.message);
     }
@@ -254,6 +267,7 @@ async function loadMessages() {
     console.error("🔥 sendMessage error:", err);
   }
 }
+
 
 
 
