@@ -204,7 +204,7 @@ async function loadMessages() {
   }, [messages]);
 
   /* ----------------------------------------------------
-   SEND MESSAGE — Final Fixed Version (with timestamp)
+   SEND MESSAGE — Final Stable Version (attachments + timestamp)
 ---------------------------------------------------- */
 async function sendMessage(e) {
   e.preventDefault();
@@ -215,30 +215,61 @@ async function sendMessage(e) {
     return;
   }
 
-  // ✅ Resolve correct recipient value
+  // ✅ Determine correct recipient
   const recipientValue =
     activeUser?.type === "user"
       ? activeUser.username || activeUser.id || activeUser.email
       : null;
 
-  // ✅ Generate UTC ISO timestamp
+  // ✅ Generate ISO timestamp
   const timestamp = new Date().toISOString();
 
-  // ✅ Build payload
+  // ✅ Base payload
   const payload = {
     sender: currentUser,
     recipient: recipientValue,
     groupid: activeUser?.type === "group" ? activeUser.id : null,
     text: text.trim(),
-    timestamp, // 👈 include timestamp
+    timestamp,
   };
 
-  // ✅ Handle attachment
-  if (attachment) {
-    payload.attachmentUrl = attachment.url || null;
+  /* ============================================================
+     📎 Handle File Attachment (S3 presigned upload)
+  ============================================================ */
+  if (attachment && attachment.name && attachment.type) {
+    try {
+      console.log("📤 Uploading attachment:", attachment.name, attachment.type);
+
+      // Step 1: Request presigned upload URL
+      const presignRes = await postJSON("/presign-upload", {
+        filename: attachment.name,
+        filetype: attachment.type,
+      });
+
+      if (presignRes?.uploadURL && presignRes?.fileKey) {
+        // Step 2: Upload directly to S3
+        await fetch(presignRes.uploadURL, {
+          method: "PUT",
+          headers: { "Content-Type": attachment.type },
+          body: attachment,
+        });
+
+        // Step 3: Add reference fields to payload
+        payload.attachmentKey = presignRes.fileKey;
+        payload.attachmentType = attachment.type;
+
+        console.log("✅ Uploaded to S3, fileKey:", presignRes.fileKey);
+      } else {
+        console.warn("⚠️ No presigned URL returned for upload:", presignRes);
+      }
+    } catch (uploadErr) {
+      console.error("🔥 Attachment upload failed:", uploadErr);
+    }
   }
 
-  // ✅ Normalized chatId (alphabetically sorted & lowercased)
+  /* ============================================================
+     💬 ChatId normalization (user or group)
+  ============================================================ */
   if (activeUser?.type === "user" && recipientValue) {
     const sorted = [currentUser.toLowerCase(), recipientValue.toLowerCase()].sort();
     payload.chatId = `CHAT#${sorted[0]}#${sorted[1]}`;
@@ -246,21 +277,24 @@ async function sendMessage(e) {
     payload.chatId = `GROUP#${activeUser.id}`;
   }
 
-  console.log("📨 Sending payload to /messages:", payload);
+  console.log("📨 Final payload to /messages:", payload);
 
+  /* ============================================================
+     🚀 Send message to backend
+  ============================================================ */
   try {
     const res = await postJSON("/messages", payload);
     console.log("📬 Send response:", res);
 
     if (res.success && res.item) {
-      // ✅ Instantly show new message in chat
+      // Add immediately to local message state
       setMessages((prev) => [...prev, res.item]);
 
-      // ✅ Reset input fields
+      // Clear input + attachment
       setText("");
       setAttachment(null);
 
-      // ✅ Reload to ensure sync with DynamoDB (handles eventual consistency)
+      // Reload after short delay to sync with DynamoDB
       setTimeout(() => {
         loadMessages();
       }, 800);
@@ -271,9 +305,6 @@ async function sendMessage(e) {
     console.error("🔥 sendMessage error:", err);
   }
 }
-
-
-
 
 
   /* ----------------------------------------------------
