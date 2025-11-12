@@ -238,8 +238,15 @@ async function loadMessages() {
 
     if (res.success) {
       setMessages((prev) => [...prev, res.item]);
+
       setText("");
       setAttachment(null);
+
+      // ✅ Slight delay before refreshing from DynamoDB
+    setTimeout(() => {
+    loadMessages(); // ensures consistency
+    
+  }, 800);
     } else {
       console.error("❌ Message send failed:", res.message);
     }
