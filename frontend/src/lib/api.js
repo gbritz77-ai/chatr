@@ -19,7 +19,8 @@ if (!base) {
     base = "http://localhost:3000/dev";
     console.log("✅ Using local Serverless Offline:", base);
   } else {
-    base = "https://sud3788n42.execute-api.eu-west-2.amazonaws.com/dev";
+    // ✅ FIXED: Correct production fallback (your current API Gateway)
+    base = "https://qcgqjznbfg.execute-api.eu-west-2.amazonaws.com/dev";
     console.log("🌍 Using production AWS API Gateway fallback:", base);
   }
 } else {
@@ -66,7 +67,7 @@ export async function getJSON(path) {
 
   try {
     const parsed = JSON.parse(text || "{}");
-    // ✅ Handle wrapped responses
+    // ✅ Handle API Gateway "body" wrapper
     if (typeof parsed?.body === "string") {
       return JSON.parse(parsed.body);
     }
@@ -82,6 +83,10 @@ export async function getJSON(path) {
 // ==========================================================
 export async function postJSON(path, body) {
   const url = buildUrl(path);
+
+  console.log("📤 POSTing to:", url);
+  console.log("📦 Payload:", body);
+
   const res = await fetch(url, {
     method: "POST",
     mode: "cors",
