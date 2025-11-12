@@ -10,6 +10,7 @@ custom:
     path: .env
     logging: true
 
+  # 🔧 Local Dev Setup
   serverless-offline:
     httpPort: 3000
     lambdaPort: 3002
@@ -18,11 +19,12 @@ custom:
     corsAllowOrigin: "*"
     noPrependStageInUrl: false
 
-  # 🌍 Shared CORS configuration
+  # 🌍 Global CORS (shared across all handlers)
   cors:
     origins:
       - "https://dev.d3rrkqgvvakfxn.amplifyapp.com"
       - "http://localhost:5173"
+      - "*"
     headers:
       - Content-Type
       - Authorization
@@ -35,8 +37,8 @@ custom:
       - GET
       - POST
       - PUT
-      - DELETE
       - PATCH
+      - DELETE
     allowCredentials: false
 
 provider:
@@ -47,7 +49,7 @@ provider:
 
   environment:
     JWT_SECRET: SuperSecretKey123!
-    VITE_API_BASE: https://6ideo0rlff.execute-api.eu-west-2.amazonaws.com/dev
+    VITE_API_BASE: ${env:VITE_API_BASE}
     MEMBERS_TABLE: chatr-members
     MESSAGES_TABLE: chatr-messages
     GROUPS_TABLE: chatr-groups
@@ -56,69 +58,56 @@ provider:
     TYPING_TABLE: chatr-typing-status
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
 
+  # ✅ IAM Permissions (DynamoDB, S3, CloudWatch)
   iam:
     role:
       statements:
         - Effect: Allow
           Action:
-            - dynamodb:Scan
-            - dynamodb:GetItem
             - dynamodb:PutItem
             - dynamodb:UpdateItem
-            - dynamodb:DeleteItem
+            - dynamodb:GetItem
+            - dynamodb:Scan
             - dynamodb:Query
+            - dynamodb:DescribeTable
           Resource:
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-members
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-messages
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-groups
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-read-tracking
             - arn:aws:dynamodb:eu-west-2:*:table/chatr-typing-status
-
         - Effect: Allow
           Action:
-            - s3:ListBucket
-          Resource: arn:aws:s3:::outsec-chat-bucket
-
-        - Effect: Allow
-          Action:
-            - s3:GetObject
-            - s3:PutObject
-            - s3:DeleteObject
-          Resource: arn:aws:s3:::outsec-chat-bucket/*
-
+            - s3:*
+          Resource:
+            - arn:aws:s3:::outsec-chat-bucket
+            - arn:aws:s3:::outsec-chat-bucket/*
         - Effect: Allow
           Action:
             - logs:CreateLogGroup
             - logs:CreateLogStream
             - logs:PutLogEvents
-          Resource: arn:aws:logs:eu-west-2:*:log-group:*
+          Resource: arn:aws:logs:eu-west-2:*:*
 
+  # ✅ CloudWatch Logs + Metrics Configuration
+  logs:
+    restApi: true
+    httpApi: true
+    frameworkLambda: true
+    retentionInDays: 30  # auto-clean old logs after 30 days
+    accessLogging: true
+    executionLogging: true
+    fullExecutionData: true
+    level: INFO
+    role: arn:aws:iam::528757805971:role/AmazonAPIGatewayPushToCloudWatchLogs
+
+  # ✅ API Gateway advanced settings
   apiGateway:
     shouldStartNameWithService: true
     binaryMediaTypes:
       - "*/*"
     minimumCompressionSize: 1024
     metrics: true
-    defaultCorsPreflightOptions:
-      allowOrigins:
-        - "https://dev.d3rrkqgvvakfxn.amplifyapp.com"
-        - "http://localhost:5173"
-        - "*"
-      allowHeaders:
-        - Content-Type
-        - Authorization
-        - X-Amz-Date
-        - X-Api-Key
-        - X-Amz-Security-Token
-        - X-Amz-User-Agent
-      allowMethods:
-        - OPTIONS
-        - GET
-        - POST
-        - PUT
-        - PATCH
-        - DELETE
-      allowCredentials: false
 
 package:
   individually: true
@@ -132,126 +121,161 @@ package:
     - "!**/README.md"
     - "!**/LICENSE*"
 
+# =========================================================
+# 🧩 LAMBDA FUNCTIONS
+# =========================================================
 functions:
-  # =========================================================
-  # 🧩 AUTH — explicit mock CORS preflight fix
-  # =========================================================
+  # ---------------------------------------------------------
+  # AUTH
+  # ---------------------------------------------------------
   auth:
-    handler: src/handlers/auth.cjs
+    handler: src/handlers/auth.handler
     events:
       - http:
           path: auth
-          method: post
-          cors:
-            origins:
-              - https://dev.d3rrkqgvvakfxn.amplifyapp.com
-              - http://localhost:5173
-            headers:
-              - Content-Type
-              - Authorization
-              - X-Amz-Date
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-            allowCredentials: false
-
-      # ✅ mock OPTIONS to guarantee 200 OK + headers
+          method: POST
+          cors: ${self:custom.cors}
       - http:
           path: auth
-          method: options
-          integration: mock
-          request:
-            template:
-              application/json: '{"statusCode": 200}'
-          response:
-            statusCodes:
-              200:
-                pattern: ''
-                headers:
-                  Access-Control-Allow-Origin: "'https://dev.d3rrkqgvvakfxn.amplifyapp.com'"
-                  Access-Control-Allow-Methods: "'OPTIONS,POST'"
-                  Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'"
+          method: OPTIONS
+          cors: ${self:custom.cors}
 
+  # ---------------------------------------------------------
+  # REGISTER
+  # ---------------------------------------------------------
   register:
     handler: src/handlers/register.handler
     events:
       - http:
           path: auth/register
-          method: post
-          cors: true
+          method: POST
+          cors: ${self:custom.cors}
+      - http:
+          path: auth/register
+          method: OPTIONS
+          cors: ${self:custom.cors}
 
+  # ---------------------------------------------------------
+  # MEMBERS (CloudWatch enabled)
+  # ---------------------------------------------------------
   members:
     handler: src/handlers/members.handler
     events:
       - http:
           path: members
-          method: any
-          cors: true
+          method: ANY
+          cors: ${self:custom.cors}
+      - http:
+          path: members
+          method: OPTIONS
+          cors: ${self:custom.cors}
+      - http:
+          path: members/{userid}
+          method: ANY
+          cors: ${self:custom.cors}
+      - http:
+          path: members/{userid}
+          method: OPTIONS
+          cors: ${self:custom.cors}
 
+  # ---------------------------------------------------------
+  # MESSAGES (💬 Same structure as AUTH)
+  # ---------------------------------------------------------
   messages:
     handler: src/handlers/messages.handler
     events:
+      # POST — Save messages
       - http:
           path: messages
-          method: any
-          cors: true
+          method: POST
+          cors: ${self:custom.cors}
 
+      # GET — Fetch messages
+      - http:
+          path: messages
+          method: GET
+          cors: ${self:custom.cors}
+
+      # OPTIONS — Preflight (CORS)
+      - http:
+          path: messages
+          method: OPTIONS
+          cors: ${self:custom.cors}
+
+      # Wildcard path for proxy support
+      - http:
+          path: messages/{proxy+}
+          method: ANY
+          cors: ${self:custom.cors}
+
+  # ---------------------------------------------------------
+  # GROUPS
+  # ---------------------------------------------------------
   groups:
     handler: src/handlers/groups.handler
     events:
       - http:
           path: groups
-          method: any
-          cors: true
+          method: ANY
+          cors: ${self:custom.cors}
       - http:
-          path: groups/add
-          method: put
-          cors: true
-      - http:
-          path: groups/remove
-          method: put
-          cors: true
-      - http:
-          path: groups/delete
-          method: delete
-          cors: true
+          path: groups/{proxy+}
+          method: ANY
+          cors: ${self:custom.cors}
 
+  # ---------------------------------------------------------
+  # PRESIGNED UPLOAD/DOWNLOAD
+  # ---------------------------------------------------------
   presignUpload:
     handler: src/handlers/presignUpload.handler
     events:
       - http:
           path: presign-upload
-          method: post
-          cors: true
+          method: POST
+          cors: ${self:custom.cors}
+      - http:
+          path: presign-upload
+          method: OPTIONS
+          cors: ${self:custom.cors}
 
   presignDownload:
     handler: src/handlers/presignDownload.handler
     events:
       - http:
           path: presign-download
-          method: post
-          cors: true
+          method: POST
+          cors: ${self:custom.cors}
+      - http:
+          path: presign-download
+          method: OPTIONS
+          cors: ${self:custom.cors}
 
+  # ---------------------------------------------------------
+  # WORK SCHEDULE
+  # ---------------------------------------------------------
   workSchedule:
     handler: src/handlers/workSchedule.handler
     events:
       - http:
           path: work-schedule
-          method: any
-          cors: true
+          method: ANY
+          cors: ${self:custom.cors}
 
+  # ---------------------------------------------------------
+  # TYPING EVENTS
+  # ---------------------------------------------------------
   typing:
     handler: src/handlers/typing.handler
     events:
       - http:
           path: typing/start
-          method: post
-          cors: true
+          method: POST
+          cors: ${self:custom.cors}
       - http:
           path: typing/stop
-          method: post
-          cors: true
+          method: POST
+          cors: ${self:custom.cors}
       - http:
           path: typing
-          method: get
-          cors: true
+          method: GET
+          cors: ${self:custom.cors}

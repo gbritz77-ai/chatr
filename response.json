@@ -1,5 +1,1 @@
-{
-  "method.response.header.Access-Control-Allow-Headers": "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'",
-  "method.response.header.Access-Control-Allow-Methods": "'OPTIONS,GET,POST,PUT,PATCH,DELETE'",
-  "method.response.header.Access-Control-Allow-Origin": "'*'"
-}
+{"errorType":"SyntaxError","errorMessage":"Unexpected token '﻿', \"﻿{\n  \"http\"... is not valid JSON","trace":["SyntaxError: Unexpected token '﻿', \"﻿{","  \"http\"... is not valid JSON","    at JSON.parse (<anonymous>)","    at Runtime.handleOnceNonStreaming (file:///var/runtime/index.mjs:1307:18)"]}
