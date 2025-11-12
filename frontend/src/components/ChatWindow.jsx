@@ -81,7 +81,8 @@ async function loadMessages() {
       url = `/messages?groupid=${encodeURIComponent(activeUser.id)}`;
     } else if (activeUser?.type === "user") {
       const userB = activeUser.username || activeUser.id;
-      const chatId = normalizeChatId(currentUser, userB);
+      const sorted = [currentUser.toLowerCase(), userB.toLowerCase()].sort();
+      const chatId = `CHAT#${sorted[0]}#${sorted[1]}`;
       url = `/messages?chatId=${encodeURIComponent(chatId)}`;
     }
 
@@ -90,24 +91,25 @@ async function loadMessages() {
     const res = await getJSON(url);
     let data = res;
 
-    // ✅ Handle API Gateway wrapping (body string)
+    // 🧩 Unwrap body if it's a JSON string (for API Gateway)
     if (typeof res?.body === "string") {
       try {
         data = JSON.parse(res.body);
       } catch (err) {
-        console.error("❌ Failed to parse res.body JSON:", err, res.body);
+        console.error("❌ Failed to parse response body:", err, res.body);
       }
     }
 
-    console.log("📨 Loaded messages response:", data);
+    console.log("📨 Loaded messages response (final parsed):", data);
 
-    // ✅ Handle correct property
+    // ✅ Safely extract messages from either key
     const msgs =
       Array.isArray(data.items) ? data.items :
       Array.isArray(data.messages) ? data.messages :
       [];
 
-    if (msgs.length) {
+    if (msgs.length > 0) {
+      console.log(`✅ Loaded ${msgs.length} messages`);
       setMessages(msgs);
     } else {
       console.warn("⚠️ No messages found in response:", data);
@@ -118,6 +120,7 @@ async function loadMessages() {
     setMessages([]);
   }
 }
+
 
 
   useEffect(() => {
