@@ -205,7 +205,9 @@ async function loadMessages() {
   ---------------------------------------------------- */
   async function sendMessage(e) {
   e.preventDefault();
+  console.log("🟢 sendMessage() triggered");
   if (!text.trim() && !attachment) return;
+   console.warn("⚠️ No message text or attachment — skipping send");
 
   const payload = {
     sender: currentUser,
