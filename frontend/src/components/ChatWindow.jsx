@@ -204,7 +204,7 @@ async function loadMessages() {
   }, [messages]);
 
   /* ----------------------------------------------------
-   SEND MESSAGE — Final Fixed Version (Nov 2025)
+   SEND MESSAGE — Final Fixed Version (with timestamp)
 ---------------------------------------------------- */
 async function sendMessage(e) {
   e.preventDefault();
@@ -221,12 +221,16 @@ async function sendMessage(e) {
       ? activeUser.username || activeUser.id || activeUser.email
       : null;
 
-  // ✅ Base payload
+  // ✅ Generate UTC ISO timestamp
+  const timestamp = new Date().toISOString();
+
+  // ✅ Build payload
   const payload = {
     sender: currentUser,
     recipient: recipientValue,
     groupid: activeUser?.type === "group" ? activeUser.id : null,
     text: text.trim(),
+    timestamp, // 👈 include timestamp
   };
 
   // ✅ Handle attachment
@@ -267,6 +271,7 @@ async function sendMessage(e) {
     console.error("🔥 sendMessage error:", err);
   }
 }
+
 
 
 
