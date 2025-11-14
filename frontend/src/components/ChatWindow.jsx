@@ -13,7 +13,6 @@ import {
   Image,
 } from "lucide-react";
 
-
 /* ============================================================
    💬 ChatWindow — fully stable version (Nov 2025)
 ============================================================ */
@@ -34,8 +33,6 @@ export default function ChatWindow({ activeUser, currentUser }) {
   const scrollContainerRef = useRef(null);
   const typingTimer = useRef(null);
 
-  const currentProfileName = localStorage.getItem("profileName") || currentUser;
-
   /* ----------------------------------------------------
      🧩 Normalize Chat ID (backend-compatible)
   ---------------------------------------------------- */
@@ -50,16 +47,8 @@ export default function ChatWindow({ activeUser, currentUser }) {
   ---------------------------------------------------- */
   async function getSignedUrl(fileKey) {
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_API_BASE}/presign-download`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ key: fileKey }),
-        }
-      );
-      const data = await res.json();
-      return data?.viewURL || null;
+      const res = await postJSON("/presign-download", { key: fileKey });
+      return res?.viewURL || null;
     } catch (err) {
       console.error("❌ Failed to get signed download URL:", err);
       return null;
@@ -69,60 +58,41 @@ export default function ChatWindow({ activeUser, currentUser }) {
   /* ----------------------------------------------------
      LOAD MESSAGES
   ---------------------------------------------------- */
-  /* ----------------------------------------------------
-   LOAD MESSAGES (final unified fix)
----------------------------------------------------- */
-async function loadMessages() {
-  if (!activeUser || !currentUser) return;
+  async function loadMessages() {
+    if (!activeUser || !currentUser) return;
 
-  try {
-    let url = "";
-    if (activeUser?.type === "group") {
-      url = `/messages?groupid=${encodeURIComponent(activeUser.id)}`;
-    } else if (activeUser?.type === "user") {
-      const userB = activeUser.username || activeUser.id;
-      const sorted = [currentUser.toLowerCase(), userB.toLowerCase()].sort();
-      const chatId = `CHAT#${sorted[0]}#${sorted[1]}`;
-      url = `/messages?chatId=${encodeURIComponent(chatId)}`;
-    }
-
-    if (!url) return;
-
-    const res = await getJSON(url);
-    let data = res;
-
-    // 🧩 Unwrap body if it's a JSON string (for API Gateway)
-    if (typeof res?.body === "string") {
-      try {
-        data = JSON.parse(res.body);
-      } catch (err) {
-        console.error("❌ Failed to parse response body:", err, res.body);
+    try {
+      let url = "";
+      if (activeUser?.type === "group") {
+        url = `/messages?groupid=${encodeURIComponent(activeUser.id)}`;
+      } else if (activeUser?.type === "user") {
+        const userB = activeUser.username || activeUser.id;
+        const chatId = normalizeChatId(currentUser, userB);
+        url = `/messages?chatId=${encodeURIComponent(chatId)}`;
       }
-    }
 
-    console.log("📨 Loaded messages response (final parsed):", data);
+      if (!url) return;
 
-    // ✅ Safely extract messages from either key
-    const msgs =
-      Array.isArray(data.items) ? data.items :
-      Array.isArray(data.messages) ? data.messages :
-      [];
+      const res = await getJSON(url);
+      let data = typeof res?.body === "string" ? JSON.parse(res.body) : res;
 
-    if (msgs.length > 0) {
-      console.log(`✅ Loaded ${msgs.length} messages`);
+      console.log("📨 Loaded messages response:", data);
+
+      const msgs =
+        Array.isArray(data.items)
+          ? data.items
+          : Array.isArray(data.messages)
+          ? data.messages
+          : [];
+
       setMessages(msgs);
-    } else {
-      console.warn("⚠️ No messages found in response:", data);
+    } catch (err) {
+      console.error("❌ Error loading messages:", err);
       setMessages([]);
     }
-  } catch (err) {
-    console.error("❌ Error loading messages:", err);
-    setMessages([]);
   }
-}
 
-
-
+  /* Auto reload every 3 seconds */
   useEffect(() => {
     if (!activeUser || !currentUser) return;
     loadMessages();
@@ -131,7 +101,7 @@ async function loadMessages() {
   }, [activeUser, currentUser]);
 
   /* ----------------------------------------------------
-     MARK CHAT AS READ
+     MARK AS READ
   ---------------------------------------------------- */
   async function markAsRead() {
     if (!activeUser || !currentUser) return;
@@ -142,7 +112,6 @@ async function loadMessages() {
           ? `GROUP#${activeUser.id}`
           : normalizeChatId(currentUser, activeUser.username || activeUser.id);
 
-      if (!chatid) return;
       await postJSON("/messages/mark-read", { chatid, username: currentUser });
       setLastReadTimestamp(new Date().toISOString());
     } catch (err) {
@@ -176,10 +145,7 @@ async function loadMessages() {
           chatid:
             activeUser?.type === "group"
               ? `GROUP#${activeUser.id}`
-              : normalizeChatId(
-                  currentUser,
-                  activeUser.username || activeUser.id
-                ),
+              : normalizeChatId(currentUser, activeUser.username || activeUser.id),
         });
       }
     }, 2000);
@@ -197,126 +163,97 @@ async function loadMessages() {
 
   useEffect(() => {
     if (autoScrollEnabled)
-      messagesEndRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "end",
-      });
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
   /* ----------------------------------------------------
-   SEND MESSAGE — Final Stable Version (attachments + timestamp)
----------------------------------------------------- */
-async function sendMessage(e) {
-  e.preventDefault();
-  console.log("🟢 sendMessage() triggered");
+     SEND MESSAGE — fixed, perfect version
+  ---------------------------------------------------- */
+  async function sendMessage(e) {
+    e.preventDefault();
+    console.log("🟢 sendMessage() triggered");
 
-  if (!text.trim() && !attachment) {
-    console.log("ℹ️ Empty message — nothing to send");
-    return;
-  }
+    if (!text.trim() && !attachment) return;
 
-  // ✅ Determine correct recipient
-  const recipientValue =
-    activeUser?.type === "user"
-      ? activeUser.username || activeUser.id || activeUser.email
-      : null;
+    setUploading(true);
 
-  // ✅ Generate ISO timestamp
-  const timestamp = new Date().toISOString();
+    const recipientValue =
+      activeUser?.type === "user"
+        ? activeUser.username || activeUser.id || activeUser.email
+        : null;
 
-  // ✅ Base payload
-  const payload = {
-    sender: currentUser,
-    recipient: recipientValue,
-    groupid: activeUser?.type === "group" ? activeUser.id : null,
-    text: text.trim(),
-    timestamp,
-  };
+    const timestamp = new Date().toISOString();
 
-  /* ============================================================
-   📎 Handle File Attachment (S3 presigned upload)
-============================================================ */
-if (attachment && attachment.name && attachment.type) {
-  try {
-    console.log("📤 Uploading attachment:", attachment.name, attachment.type);
+    const payload = {
+      sender: currentUser,
+      recipient: recipientValue,
+      groupid: activeUser?.type === "group" ? activeUser.id : null,
+      text: text.trim() || "",
+      timestamp,
+    };
 
-    // Step 1: Request presigned upload URL
-    const presignRes = await postJSON("/presign-upload", {
-      filename: attachment.name,
-      contentType: attachment.type,  // ✅ FIXED: was filetype
-    });
-
-    console.log("📦 Presign response:", presignRes);
-
-    if (presignRes?.uploadURL && presignRes?.fileKey) {
-      // Step 2: Upload directly to S3 (must match contentType exactly)
-      const uploadResponse = await fetch(presignRes.uploadURL, {
-        method: "PUT",
-        headers: {
-          "Content-Type": attachment.type,   // ✅ Must match presign contentType
-        },
-        body: attachment,
-      });
-
-      console.log("📤 S3 Upload Response:", uploadResponse.status);
-
-      // Step 3: Add reference fields to payload
-      payload.attachmentKey = presignRes.fileKey;
-      payload.attachmentType = attachment.type;
-
-      console.log("✅ Uploaded to S3 successfully, fileKey:", presignRes.fileKey);
-
-    } else {
-      console.warn("⚠️ No presigned URL returned for upload:", presignRes);
+    if (activeUser?.type === "user" && recipientValue) {
+      const chatId = normalizeChatId(currentUser, recipientValue);
+      payload.chatId = chatId;
+    } else if (activeUser?.type === "group") {
+      payload.chatId = `GROUP#${activeUser.id}`;
     }
-  } catch (uploadErr) {
-    console.error("🔥 Attachment upload failed:", uploadErr);
-  }
-}
 
+    console.log("📨 BASE PAYLOAD:", payload);
 
-  /* ============================================================
-     💬 ChatId normalization (user or group)
-  ============================================================ */
-  if (activeUser?.type === "user" && recipientValue) {
-    const sorted = [currentUser.toLowerCase(), recipientValue.toLowerCase()].sort();
-    payload.chatId = `CHAT#${sorted[0]}#${sorted[1]}`;
-  } else if (activeUser?.type === "group") {
-    payload.chatId = `GROUP#${activeUser.id}`;
-  }
+    /* ----------------- FILE ATTACHMENT ----------------- */
+    if (attachment) {
+      console.log("📎 Processing attachment:", attachment);
 
-  console.log("📨 Final payload to /messages:", payload);
+      if (attachment.url && attachment.type === "image/gif") {
+        payload.gifUrl = attachment.url;
+      } else if (attachment instanceof File) {
+        try {
+          const presignRes = await postJSON("/presign-upload", {
+            filename: attachment.name,
+            contentType: attachment.type,
+            filetype: attachment.type,
+          });
 
-  /* ============================================================
-     🚀 Send message to backend
-  ============================================================ */
-  try {
-    const res = await postJSON("/messages", payload);
-    console.log("📬 Send response:", res);
+          if (presignRes?.uploadURL && presignRes?.fileKey) {
+            await fetch(presignRes.uploadURL, {
+              method: "PUT",
+              headers: { "Content-Type": attachment.type },
+              body: attachment,
+            });
 
-    if (res.success && res.item) {
-      // Add immediately to local message state
-      setMessages((prev) => [...prev, res.item]);
-
-      // Clear input + attachment
-      setText("");
-      setAttachment(null);
-
-      // Reload after short delay to sync with DynamoDB
-      setTimeout(() => {
-        loadMessages();
-      }, 800);
-    } else {
-      console.error("❌ Message send failed:", res.message);
+            payload.attachmentKey = presignRes.fileKey;
+            payload.attachmentType = attachment.type;
+          }
+        } catch (err) {
+          console.error("🔥 Attachment upload failed:", err);
+        }
+      }
     }
-  } catch (err) {
-    console.error("🔥 sendMessage error:", err);
-  }
-}
 
+    console.log("📨 FINAL PAYLOAD TO /messages:", payload);
+
+    try {
+      const res = await postJSON("/messages", payload);
+      const parsed = typeof res?.body === "string" ? JSON.parse(res.body) : res;
+
+      if (parsed?.success) {
+        setMessages((prev) => [...prev, parsed.item]);
+        setText("");
+        setAttachment(null);
+        setTimeout(() => loadMessages(), 500);
+      } else {
+        console.error("❌ Message send failed:", parsed?.message);
+      }
+    } catch (err) {
+      console.error("🔥 sendMessage error:", err);
+    }
+
+    setUploading(false);
+  }
 
   /* ----------------------------------------------------
-     GUARD RENDER IF NO ACTIVE USER
+     RENDER — if no active chat selected
   ---------------------------------------------------- */
   if (!activeUser) {
     return (
@@ -327,7 +264,7 @@ if (attachment && attachment.name && attachment.type) {
   }
 
   /* ----------------------------------------------------
-     RENDER
+     RENDER — MAIN UI
   ---------------------------------------------------- */
   return (
     <div className="flex flex-col flex-1 h-screen ml-[320px] bg-slate-50 relative">
@@ -343,9 +280,7 @@ if (attachment && attachment.name && attachment.type) {
           <div>
             <div>{activeUser.name || activeUser.id}</div>
             {remoteTyping && (
-              <div className="text-xs text-slate-500 animate-pulse">
-                typing...
-              </div>
+              <div className="text-xs text-slate-500 animate-pulse">typing...</div>
             )}
           </div>
         </div>
@@ -372,7 +307,7 @@ if (attachment && attachment.name && attachment.type) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Bar */}
+      {/* Input */}
       <div className="sticky bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-inner px-6 py-3">
         <form onSubmit={sendMessage} className="flex items-center gap-3 relative">
           <input
@@ -389,18 +324,16 @@ if (attachment && attachment.name && attachment.type) {
             type="button"
             onClick={() => document.getElementById("fileInput").click()}
             className="text-slate-500 hover:text-blue-600 transition"
-            title="Attach file"
           >
             <Paperclip size={20} />
           </button>
 
-          {/* Emoji Picker */}
+          {/* Emoji */}
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowEmojiPicker((prev) => !prev)}
               className="text-slate-500 hover:text-yellow-500 transition"
-              title="Add emoji"
             >
               <Smile size={22} />
             </button>
@@ -418,13 +351,12 @@ if (attachment && attachment.name && attachment.type) {
             )}
           </div>
 
-          {/* GIF Picker */}
+          {/* GIF */}
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowGifPicker((prev) => !prev)}
               className="text-slate-500 hover:text-pink-600 transition"
-              title="Send GIF"
             >
               <Image size={22} />
             </button>
@@ -460,13 +392,8 @@ if (attachment && attachment.name && attachment.type) {
                 ? "bg-slate-400 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700 text-white"
             }`}
-            title="Send message"
           >
-            {uploading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Send className="w-5 h-5" />
-            )}
+            {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>
         </form>
 
@@ -491,7 +418,7 @@ if (attachment && attachment.name && attachment.type) {
 }
 
 /* ============================================================
-   💬 MessageBubble Component
+   💬 MessageBubble
 ============================================================ */
 function MessageBubble({ msg, currentUser, getSignedUrl }) {
   const [viewUrl, setViewUrl] = useState(msg.attachmentUrl || null);
@@ -505,12 +432,7 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
   }, [msg.attachmentKey]);
 
   const isMine = msg.sender === currentUser;
-  const senderName = isMine
-    ? "You"
-    : msg.senderProfileName || msg.sender?.split("@")[0] || msg.sender;
-
   const time = new Date(msg.timestamp).toLocaleString([], {
-    year: "numeric",
     month: "short",
     day: "2-digit",
     hour: "2-digit",
@@ -518,61 +440,32 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
   });
 
   const fileType = msg.attachmentType || "";
-  const fileName = (msg.attachmentKey || msg.attachmentUrl || "").toLowerCase();
-  const isImage =
-    fileType.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
-  const isPDF = fileType === "application/pdf" || fileName.endsWith(".pdf");
-  const isOtherFile = msg.attachmentKey && !isImage && !isPDF;
+  const isImage = fileType.startsWith("image/");
+  const isPDF = fileType === "application/pdf";
+  const isOther = msg.attachmentKey && !isImage && !isPDF;
 
   return (
     <div className={`flex flex-col gap-1 ${isMine ? "items-end" : "items-start"}`}>
-      <div
-        className={`text-xs font-semibold mb-1 ${
-          isMine ? "text-blue-500" : "text-slate-500"
-        }`}
-      >
-        {senderName}
-      </div>
-
-      <div
-        className={`p-3 rounded-lg max-w-[70%] ${
-          isMine ? "bg-blue-600 text-white ml-auto" : "bg-white border text-slate-800"
-        }`}
-      >
-        {msg.text && <div className="whitespace-pre-wrap break-words">{msg.text}</div>}
+      <div className={`p-3 rounded-lg max-w-[70%] ${isMine ? "bg-blue-600 text-white" : "bg-white border"}`}>
+        {msg.text && <div className="whitespace-pre-wrap">{msg.text}</div>}
 
         {viewUrl && isImage && (
-          <img
-            src={viewUrl}
-            alt="attachment"
-            loading="lazy"
-            className="max-h-64 rounded-lg border mt-2 object-contain shadow-sm cursor-pointer transition hover:scale-[1.02]"
-          />
+          <img src={viewUrl} className="max-h-64 rounded mt-2 border" />
         )}
 
-        {viewUrl && (isPDF || isOtherFile) && (
+        {viewUrl && (isPDF || isOther) && (
           <a
             href={viewUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className={`mt-2 flex items-center gap-2 px-3 py-2 rounded-md border transition ${
-              isMine
-                ? "border-blue-400 bg-blue-700/40 hover:bg-blue-700/70 text-white"
-                : "border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-800"
-            }`}
+            className="mt-2 flex items-center gap-2 px-3 py-2 border rounded text-sm"
           >
             <FileText size={16} />
-            <span className="text-sm truncate">
-              {msg.attachmentKey?.split("/").pop() || "Download File"}
-            </span>
+            Download
           </a>
         )}
 
-        <div
-          className={`text-xs mt-2 ${isMine ? "text-blue-200" : "text-slate-500"}`}
-        >
-          {time}
-        </div>
+        <div className="text-xs mt-2 opacity-70">{time}</div>
       </div>
     </div>
   );
