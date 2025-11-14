@@ -234,38 +234,46 @@ async function sendMessage(e) {
   };
 
   /* ============================================================
-     📎 Handle File Attachment (S3 presigned upload)
-  ============================================================ */
-  if (attachment && attachment.name && attachment.type) {
-    try {
-      console.log("📤 Uploading attachment:", attachment.name, attachment.type);
+   📎 Handle File Attachment (S3 presigned upload)
+============================================================ */
+if (attachment && attachment.name && attachment.type) {
+  try {
+    console.log("📤 Uploading attachment:", attachment.name, attachment.type);
 
-      // Step 1: Request presigned upload URL
-      const presignRes = await postJSON("/presign-upload", {
-        filename: attachment.name,
-        filetype: attachment.type,
+    // Step 1: Request presigned upload URL
+    const presignRes = await postJSON("/presign-upload", {
+      filename: attachment.name,
+      contentType: attachment.type,  // ✅ FIXED: was filetype
+    });
+
+    console.log("📦 Presign response:", presignRes);
+
+    if (presignRes?.uploadURL && presignRes?.fileKey) {
+      // Step 2: Upload directly to S3 (must match contentType exactly)
+      const uploadResponse = await fetch(presignRes.uploadURL, {
+        method: "PUT",
+        headers: {
+          "Content-Type": attachment.type,   // ✅ Must match presign contentType
+        },
+        body: attachment,
       });
 
-      if (presignRes?.uploadURL && presignRes?.fileKey) {
-        // Step 2: Upload directly to S3
-        await fetch(presignRes.uploadURL, {
-          method: "PUT",
-          headers: { "Content-Type": attachment.type },
-          body: attachment,
-        });
+      console.log("📤 S3 Upload Response:", uploadResponse.status);
 
-        // Step 3: Add reference fields to payload
-        payload.attachmentKey = presignRes.fileKey;
-        payload.attachmentType = attachment.type;
+      // Step 3: Add reference fields to payload
+      payload.attachmentKey = presignRes.fileKey;
+      payload.attachmentType = attachment.type;
 
-        console.log("✅ Uploaded to S3, fileKey:", presignRes.fileKey);
-      } else {
-        console.warn("⚠️ No presigned URL returned for upload:", presignRes);
-      }
-    } catch (uploadErr) {
-      console.error("🔥 Attachment upload failed:", uploadErr);
+      console.log("✅ Uploaded to S3 successfully, fileKey:", presignRes.fileKey);
+
+    } else {
+      console.warn("⚠️ No presigned URL returned for upload:", presignRes);
     }
+  } catch (uploadErr) {
+    console.error("🔥 Attachment upload failed:", uploadErr);
   }
+}
+
 
   /* ============================================================
      💬 ChatId normalization (user or group)
