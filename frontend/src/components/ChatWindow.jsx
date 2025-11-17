@@ -422,7 +422,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
 }
 
 /* ============================================================
-   💬 MessageBubble
+   💬 MessageBubble (with sender name)
 ============================================================ */
 function MessageBubble({ msg, currentUser, getSignedUrl }) {
   const [viewUrl, setViewUrl] = useState(msg.attachmentUrl || null);
@@ -436,6 +436,7 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
   }, [msg.attachmentKey]);
 
   const isMine = msg.sender === currentUser;
+
   const time = new Date(msg.timestamp).toLocaleString([], {
     month: "short",
     day: "2-digit",
@@ -443,16 +444,17 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
     minute: "2-digit",
   });
 
-  // -----------------------------
-  // 🧩 TYPE CHECKS
-  // -----------------------------
+  /* -----------------------------
+     TYPE CHECKS
+  ----------------------------- */
   const fileType = msg.attachmentType || "";
   const isImage = fileType.startsWith("image/") && fileType !== "image/gif";
-  const isGif = fileType === "image/gif" || (msg.gifUrl && msg.gifUrl.endsWith(".gif"));
+  const isGif =
+    fileType === "image/gif" ||
+    (msg.gifUrl && msg.gifUrl.toLowerCase().endsWith(".gif"));
   const isPDF = fileType === "application/pdf";
   const isOther = msg.attachmentKey && !isImage && !isGif && !isPDF;
 
-  // URL priority: GIF URL (external) OR S3 signed URL
   const displayUrl = msg.gifUrl || viewUrl;
 
   return (
@@ -462,6 +464,13 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
           isMine ? "bg-blue-600 text-white" : "bg-white border"
         }`}
       >
+        {/* Sender Name (only for incoming messages) */}
+        {!isMine && (
+          <div className="text-xs font-semibold text-slate-600 mb-1">
+            {msg.sender}
+          </div>
+        )}
+
         {/* Text */}
         {msg.text && <div className="whitespace-pre-wrap">{msg.text}</div>}
 
@@ -470,12 +479,12 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
           <img src={displayUrl} className="max-h-64 rounded mt-2 border" />
         )}
 
-        {/* Normal Images */}
+        {/* Normal Image */}
         {displayUrl && isImage && (
           <img src={displayUrl} className="max-h-64 rounded mt-2 border" />
         )}
 
-        {/* PDF / Other */}
+        {/* Files (PDF / Other attachments) */}
         {displayUrl && (isPDF || isOther) && (
           <a
             href={displayUrl}
@@ -488,9 +497,11 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
           </a>
         )}
 
+        {/* Time */}
         <div className="text-xs mt-2 opacity-70">{time}</div>
       </div>
     </div>
   );
 }
+
 
