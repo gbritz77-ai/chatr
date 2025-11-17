@@ -435,17 +435,6 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
     }
   }, [msg.attachmentKey]);
 
-   const isGif =
-          msg.attachmentType === "image/gif" ||
-          (msg.gifUrl && msg.gifUrl.endsWith(".gif"));
-
-        {(msg.gifUrl || (viewUrl && isGif)) && (
-          <img
-            src={msg.gifUrl || viewUrl}
-            className="max-h-64 rounded mt-2 border"
-          />
-        )}
-
   const isMine = msg.sender === currentUser;
   const time = new Date(msg.timestamp).toLocaleString([], {
     month: "short",
@@ -454,29 +443,42 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
     minute: "2-digit",
   });
 
+  // -----------------------------
+  // 🧩 TYPE CHECKS
+  // -----------------------------
   const fileType = msg.attachmentType || "";
-  const isImage = fileType.startsWith("image/");
+  const isImage = fileType.startsWith("image/") && fileType !== "image/gif";
+  const isGif = fileType === "image/gif" || (msg.gifUrl && msg.gifUrl.endsWith(".gif"));
   const isPDF = fileType === "application/pdf";
-  const isOther = msg.attachmentKey && !isImage && !isPDF;
+  const isOther = msg.attachmentKey && !isImage && !isGif && !isPDF;
+
+  // URL priority: GIF URL (external) OR S3 signed URL
+  const displayUrl = msg.gifUrl || viewUrl;
 
   return (
     <div className={`flex flex-col gap-1 ${isMine ? "items-end" : "items-start"}`}>
-      <div className={`p-3 rounded-lg max-w-[70%] ${isMine ? "bg-blue-600 text-white" : "bg-white border"}`}>
+      <div
+        className={`p-3 rounded-lg max-w-[70%] ${
+          isMine ? "bg-blue-600 text-white" : "bg-white border"
+        }`}
+      >
+        {/* Text */}
         {msg.text && <div className="whitespace-pre-wrap">{msg.text}</div>}
 
-       {(msg.gifUrl || (viewUrl && isGif)) && (
-          <img
-            src={msg.gifUrl || viewUrl}
-            className="max-h-64 rounded mt-2 border"
-          />
-        )}
-        {viewUrl && isImage && (
-          <img src={viewUrl} className="max-h-64 rounded mt-2 border" />
+        {/* GIF */}
+        {displayUrl && isGif && (
+          <img src={displayUrl} className="max-h-64 rounded mt-2 border" />
         )}
 
-        {viewUrl && (isPDF || isOther) && (
+        {/* Normal Images */}
+        {displayUrl && isImage && (
+          <img src={displayUrl} className="max-h-64 rounded mt-2 border" />
+        )}
+
+        {/* PDF / Other */}
+        {displayUrl && (isPDF || isOther) && (
           <a
-            href={viewUrl}
+            href={displayUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-2 flex items-center gap-2 px-3 py-2 border rounded text-sm"
@@ -491,3 +493,4 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
     </div>
   );
 }
+
