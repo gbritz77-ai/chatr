@@ -45,15 +45,20 @@ export default function ChatWindow({ activeUser, currentUser }) {
   /* ----------------------------------------------------
      🔗 Get Signed URL for attachments
   ---------------------------------------------------- */
-  async function getSignedUrl(fileKey) {
-    try {
-      const res = await postJSON("/presign-download", { key: fileKey });
-      return res?.viewURL || null;
-    } catch (err) {
-      console.error("❌ Failed to get signed download URL:", err);
-      return null;
-    }
+  /* ----------------------------------------------------
+   🔗 Get Signed URL for attachments
+---------------------------------------------------- */
+async function getSignedUrl(fileKey) {
+  try {
+    const res = await postJSON("/presign-download", { key: fileKey });
+    return res?.viewURL || null;
+  } catch (err) {
+    console.error("❌ Failed to get signed download URL:", err);
+    return null;
   }
+}
+
+
 
   /* ----------------------------------------------------
      LOAD MESSAGES
@@ -94,11 +99,24 @@ export default function ChatWindow({ activeUser, currentUser }) {
 
   /* Auto reload every 3 seconds */
   useEffect(() => {
-    if (!activeUser || !currentUser) return;
-    loadMessages();
-    const interval = setInterval(loadMessages, 3000);
-    return () => clearInterval(interval);
-  }, [activeUser, currentUser]);
+  async function attachUrls() {
+    const updated = [];
+
+    for (let m of messages) {
+      if (m.fileKey) {
+        const url = await getSignedUrl(m.fileKey);
+        updated.push({ ...m, attachmentUrl: url });
+      } else {
+        updated.push(m);
+      }
+    }
+
+    setMessages(updated);
+  }
+
+  if (messages.length) attachUrls();
+}, [messages]);
+
 
   /* ----------------------------------------------------
      MARK AS READ
@@ -430,17 +448,20 @@ export default function ChatWindow({ activeUser, currentUser }) {
    💬 MessageBubble — with sender display name
 ============================================================ */
 function MessageBubble({ msg, currentUser, getSignedUrl }) {
-  const [viewUrl, setViewUrl] = useState(msg.attachmentUrl || null);
+  const [viewUrl, setViewUrl] = useState(null);
 
   useEffect(() => {
-    if (!viewUrl && msg.attachmentKey) {
-      getSignedUrl(msg.attachmentKey).then((url) => {
-        if (url) setViewUrl(url);
-      });
+    async function loadUrl() {
+      if (msg.attachmentKey) {
+        const url = await getSignedUrl(msg.attachmentKey);
+        setViewUrl(url);
+      }
     }
+    loadUrl();
   }, [msg.attachmentKey]);
 
   const isMine = msg.sender === currentUser;
+
   const time = new Date(msg.timestamp).toLocaleString([], {
     month: "short",
     day: "2-digit",
@@ -450,10 +471,13 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
 
   const senderName = msg.senderName || msg.sender;
 
-  // Attachment type checks
+  // Determine file type
   const fileType = msg.attachmentType || "";
-  const isImage = fileType.startsWith("image/") && fileType !== "image/gif";
-  const isGif = fileType === "image/gif" || (msg.gifUrl && msg.gifUrl.endsWith(".gif"));
+  const isImage =
+    fileType.startsWith("image/") && fileType !== "image/gif";
+  const isGif =
+    fileType === "image/gif" ||
+    (msg.gifUrl && msg.gifUrl.endsWith(".gif"));
   const isPDF = fileType === "application/pdf";
   const isOther = msg.attachmentKey && !isImage && !isGif && !isPDF;
 
@@ -461,12 +485,8 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
 
   return (
     <div className={`flex flex-col gap-1 ${isMine ? "items-end" : "items-start"}`}>
-      
-      {/* 👉 Sender Name */}
       {!isMine && (
-        <div className="text-xs text-slate-500 mb-1 ml-1">
-          {senderName}
-        </div>
+        <div className="text-xs text-slate-500 mb-1 ml-1">{senderName}</div>
       )}
 
       <div
@@ -505,6 +525,7 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
     </div>
   );
 }
+
 
 
 
