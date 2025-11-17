@@ -184,13 +184,18 @@ export default function ChatWindow({ activeUser, currentUser }) {
 
     const timestamp = new Date().toISOString();
 
+
+
     const payload = {
       sender: currentUser,
+      senderName: localStorage.getItem("profileName") || currentUser,
       recipient: recipientValue,
       groupid: activeUser?.type === "group" ? activeUser.id : null,
       text: text.trim() || "",
       timestamp,
     };
+
+    payload.senderName = localStorage.getItem("profileName") || currentUser;
 
     if (activeUser?.type === "user" && recipientValue) {
       const chatId = normalizeChatId(currentUser, recipientValue);
@@ -422,7 +427,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
 }
 
 /* ============================================================
-   💬 MessageBubble (with sender name)
+   💬 MessageBubble — with sender display name
 ============================================================ */
 function MessageBubble({ msg, currentUser, getSignedUrl }) {
   const [viewUrl, setViewUrl] = useState(msg.attachmentUrl || null);
@@ -436,7 +441,6 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
   }, [msg.attachmentKey]);
 
   const isMine = msg.sender === currentUser;
-
   const time = new Date(msg.timestamp).toLocaleString([], {
     month: "short",
     day: "2-digit",
@@ -444,14 +448,12 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
     minute: "2-digit",
   });
 
-  /* -----------------------------
-     TYPE CHECKS
-  ----------------------------- */
+  const senderName = msg.senderName || msg.sender;
+
+  // Attachment type checks
   const fileType = msg.attachmentType || "";
   const isImage = fileType.startsWith("image/") && fileType !== "image/gif";
-  const isGif =
-    fileType === "image/gif" ||
-    (msg.gifUrl && msg.gifUrl.toLowerCase().endsWith(".gif"));
+  const isGif = fileType === "image/gif" || (msg.gifUrl && msg.gifUrl.endsWith(".gif"));
   const isPDF = fileType === "application/pdf";
   const isOther = msg.attachmentKey && !isImage && !isGif && !isPDF;
 
@@ -459,18 +461,19 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
 
   return (
     <div className={`flex flex-col gap-1 ${isMine ? "items-end" : "items-start"}`}>
+      
+      {/* 👉 Sender Name */}
+      {!isMine && (
+        <div className="text-xs text-slate-500 mb-1 ml-1">
+          {senderName}
+        </div>
+      )}
+
       <div
         className={`p-3 rounded-lg max-w-[70%] ${
           isMine ? "bg-blue-600 text-white" : "bg-white border"
         }`}
       >
-        {/* Sender Name (only for incoming messages) */}
-        {!isMine && (
-          <div className="text-xs font-semibold text-slate-600 mb-1">
-            {msg.sender}
-          </div>
-        )}
-
         {/* Text */}
         {msg.text && <div className="whitespace-pre-wrap">{msg.text}</div>}
 
@@ -479,12 +482,12 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
           <img src={displayUrl} className="max-h-64 rounded mt-2 border" />
         )}
 
-        {/* Normal Image */}
+        {/* Images */}
         {displayUrl && isImage && (
           <img src={displayUrl} className="max-h-64 rounded mt-2 border" />
         )}
 
-        {/* Files (PDF / Other attachments) */}
+        {/* PDF / Other */}
         {displayUrl && (isPDF || isOther) && (
           <a
             href={displayUrl}
@@ -497,11 +500,11 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
           </a>
         )}
 
-        {/* Time */}
         <div className="text-xs mt-2 opacity-70">{time}</div>
       </div>
     </div>
   );
 }
+
 
 
