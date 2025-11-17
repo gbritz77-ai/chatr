@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";    // ✅ FIX 1
 import { getMembers, API_BASE } from "../lib/api";
 import { Avatar } from "./Avatar";
 import { LogOut, Users, X, Clock, Plus, Edit3 } from "lucide-react";
 
 export default function Sidebar({ onSelectUser, currentUser }) {
+  const navigate = useNavigate();                 // ✅ FIX 2
+
   const [members, setMembers] = useState([]);
   const [groups, setGroups] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
@@ -28,6 +31,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     Sat: { start: "", end: "", enabled: false },
     Sun: { start: "", end: "", enabled: false },
   });
+
   const [mySchedule, setMySchedule] = useState(null);
   const [isSelfActive, setIsSelfActive] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -48,6 +52,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
             : typeof res?.body === "string"
             ? JSON.parse(res.body)
             : res;
+
         const membersData = parsed?.members || parsed?.Items || [];
         setMembers(membersData);
 
@@ -62,6 +67,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
             ...g,
             groupname: g.groupname || g.groupName,
           })) || [];
+
         setGroups(fixedGroups);
 
         // schedule for footer active dot
@@ -71,6 +77,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
               m.userid?.toLowerCase() === currentUser?.toLowerCase() ||
               m.profileName?.toLowerCase() === profileName?.toLowerCase()
           ) || null;
+
         if (me) {
           const sched = await fetchSchedule(me.userid);
           setMySchedule(sched);
@@ -83,7 +90,9 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     loadData();
   }, [currentUser, profileName]);
 
-  // keep self active indicator fresh every minute
+  /* =========================================================
+     Keep "active" indicator live
+  ========================================================= */
   useEffect(() => {
     if (!mySchedule) return;
     const t = setInterval(() => setIsSelfActive(checkIfSelfActive(mySchedule)), 60000);
@@ -104,13 +113,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     const mins = now.getHours() * 60 + now.getMinutes();
     return mins >= sh * 60 + sm && mins <= eh * 60 + em;
   }
-
-  const getChatKey = (type, id, otherUser) =>
-    type === "group"
-      ? `GROUP#${id}`
-      : `CHAT#${[currentUser, otherUser]
-          .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
-          .join("#")}`;
 
   async function fetchSchedule(userid) {
     try {
@@ -140,6 +142,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       });
       const result = await res.json();
       const data = typeof result?.body === "string" ? JSON.parse(result.body) : result;
+
       if (data?.success) {
         setMySchedule(schedule);
         setIsSelfActive(checkIfSelfActive(schedule));
@@ -156,23 +159,34 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }
 
   /* =========================================================
+     LOGOUT — FIXED
+  ========================================================= */
+  function handleLogout() {
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // Sometimes React Router needs a short delay on state-heavy apps
+    setTimeout(() => {
+      navigate("/login");   // ✅ FIX 3 (Now works)
+    }, 50);
+  }
+
+  /* =========================================================
      UI
   ========================================================= */
   return (
     <aside className="fixed top-0 left-0 bottom-0 w-[320px] bg-white border-r border-slate-200 flex flex-col z-20">
+      
       {/* Header */}
       <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
         <img src="/logo.JPG" alt="CHATr Logo" className="w-40 rounded-md border" />
+
         <button
-          onClick={() => {
-            localStorage.clear();
-            navigate("/login");
-          }}
+          onClick={handleLogout}
           className="text-slate-500 hover:text-red-600"
         >
           <LogOut size={18} />
         </button>
-
       </div>
 
       {/* Search */}
@@ -250,7 +264,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
           ))}
       </div>
 
-      {/* Footer + Time Management */}
+      {/* Footer */}
       <div className="border-t border-slate-200 p-3 bg-gray-50">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -267,6 +281,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
               </div>
             </div>
           </div>
+
           <button
             className="text-gray-600 hover:text-blue-600"
             onClick={() => {
@@ -289,7 +304,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         </div>
       </div>
 
-      {/* 🕒 TIME MANAGEMENT MODAL */}
+      {/* Schedule Modal */}
       {showScheduleModal && selectedMember && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-[460px] p-5 relative">
@@ -365,9 +380,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                 onClick={saveSchedule}
                 disabled={loading}
                 className={`${
-                  loading
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-700"
+                  loading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
                 } text-white text-sm px-3 py-2 rounded-md`}
               >
                 Save
