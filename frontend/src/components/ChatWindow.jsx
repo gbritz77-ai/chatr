@@ -76,7 +76,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       const res = await getJSON(url);
       let data = typeof res?.body === "string" ? JSON.parse(res.body) : res;
 
-      console.log("📨 Loaded messages response:", data);
+      //console.log("📨 Loaded messages response:", data);
 
       const msgs =
         Array.isArray(data.items)
@@ -171,7 +171,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
   ---------------------------------------------------- */
   async function sendMessage(e) {
     e.preventDefault();
-    console.log("🟢 sendMessage() triggered");
+    //console.log("🟢 sendMessage() triggered");
 
     if (!text.trim() && !attachment) return;
 
@@ -204,11 +204,11 @@ export default function ChatWindow({ activeUser, currentUser }) {
       payload.chatId = `GROUP#${activeUser.id}`;
     }
 
-    console.log("📨 BASE PAYLOAD:", payload);
+    //console.log("📨 BASE PAYLOAD:", payload);
 
     /* ----------------- FILE ATTACHMENT ----------------- */
     if (attachment) {
-      console.log("📎 Processing attachment:", attachment);
+      //console.log("📎 Processing attachment:", attachment);
 
       if (attachment.isGif && attachment.url) {
           payload.attachmentType = "image/gif";
@@ -238,7 +238,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       }
     }
 
-    console.log("📨 FINAL PAYLOAD TO /messages:", payload);
+    //console.log("📨 FINAL PAYLOAD TO /messages:", payload);
 
     try {
       const res = await postJSON("/messages", payload);
