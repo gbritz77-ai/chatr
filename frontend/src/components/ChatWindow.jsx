@@ -205,9 +205,11 @@ export default function ChatWindow({ activeUser, currentUser }) {
     if (attachment) {
       console.log("📎 Processing attachment:", attachment);
 
-      if (attachment.url && attachment.type === "image/gif") {
-        payload.gifUrl = attachment.url;
-      } else if (attachment instanceof File) {
+      if (attachment.isGif && attachment.url) {
+          payload.attachmentType = "image/gif";
+          payload.attachmentKey = null;
+          payload.gifUrl = attachment.url;  // Frontend-rendered GIF
+        } else if (attachment instanceof File) {
         try {
           const presignRes = await postJSON("/presign-upload", {
             filename: attachment.name,
@@ -368,6 +370,8 @@ export default function ChatWindow({ activeUser, currentUser }) {
                       type: "image/gif",
                       name: gifUrl,
                       url: gifUrl,
+                      isGif: true,                 
+                      attachmentType: "image/gif",
                     });
                     setShowGifPicker(false);
                   }}
@@ -431,6 +435,17 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
     }
   }, [msg.attachmentKey]);
 
+   const isGif =
+          msg.attachmentType === "image/gif" ||
+          (msg.gifUrl && msg.gifUrl.endsWith(".gif"));
+
+        {(msg.gifUrl || (viewUrl && isGif)) && (
+          <img
+            src={msg.gifUrl || viewUrl}
+            className="max-h-64 rounded mt-2 border"
+          />
+        )}
+
   const isMine = msg.sender === currentUser;
   const time = new Date(msg.timestamp).toLocaleString([], {
     month: "short",
@@ -449,6 +464,12 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
       <div className={`p-3 rounded-lg max-w-[70%] ${isMine ? "bg-blue-600 text-white" : "bg-white border"}`}>
         {msg.text && <div className="whitespace-pre-wrap">{msg.text}</div>}
 
+       {(msg.gifUrl || (viewUrl && isGif)) && (
+          <img
+            src={msg.gifUrl || viewUrl}
+            className="max-h-64 rounded mt-2 border"
+          />
+        )}
         {viewUrl && isImage && (
           <img src={viewUrl} className="max-h-64 rounded mt-2 border" />
         )}
