@@ -162,16 +162,17 @@ export default function Sidebar({ onSelectUser, currentUser }) {
     <aside className="fixed top-0 left-0 bottom-0 w-[320px] bg-white border-r border-slate-200 flex flex-col z-20">
       {/* Header */}
       <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-        <img src="/logo/logo.JPG" alt="CHATr Logo" className="w-40 rounded-md border" />
+        <img src="/logo.JPG" alt="CHATr Logo" className="w-40 rounded-md border" />
         <button
           onClick={() => {
             localStorage.clear();
-            window.location.href = "/login";
+            navigate("/login");
           }}
           className="text-slate-500 hover:text-red-600"
         >
           <LogOut size={18} />
         </button>
+
       </div>
 
       {/* Search */}
