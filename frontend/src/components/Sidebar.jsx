@@ -19,25 +19,17 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [newGroupName, setNewGroupName] = useState("");
 
-  // Schedules (unchanged)
-  const [schedule, setSchedule] = useState({
-    Mon: { start: "09:00", end: "17:00", enabled: true },
-    Tue: { start: "09:00", end: "17:00", enabled: true },
-    Wed: { start: "09:00", end: "17:00", enabled: true },
-    Thu: { start: "09:00", end: "17:00", enabled: true },
-    Fri: { start: "09:00", end: "17:00", enabled: true },
-    Sat: { start: "", end: "", enabled: false },
-    Sun: { start: "", end: "", enabled: false },
-  });
+  // manage group rename state
+  const [manageGroupName, setManageGroupName] = useState("");
 
   const profileName = localStorage.getItem("profileName") || currentUser;
 
   /* =========================================================
-     Load Members + Groups
+     Load Members & Groups
   ========================================================= */
   async function loadData() {
     try {
-      // Load Members
+      // members
       const res = await getMembers();
       const parsed =
         typeof res === "string"
@@ -49,7 +41,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       const membersData = parsed?.members || parsed?.Items || [];
       setMembers(membersData);
 
-      // Load Groups
+      // groups
       const groupRes = await fetch(`${API_BASE}/groups`);
       const groupRaw = await groupRes.json();
       const groupParsed =
@@ -58,7 +50,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       const fixedGroups =
         groupParsed?.groups?.map((g) => ({
           ...g,
-          groupname: g.groupName || g.groupname,
+          groupname: g.groupname || g.groupName,
         })) || [];
 
       setGroups(fixedGroups);
@@ -72,7 +64,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   }, []);
 
   /* =========================================================
-     CREATE GROUP
+     CREATE GROUP — fully working
   ========================================================= */
   async function handleCreateGroup() {
     if (!newGroupName.trim()) {
@@ -99,9 +91,9 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         setShowCreateModal(false);
         setNewGroupName("");
         setSelectedMembers([]);
-        loadData();
+        loadData(); // reload groups
       } else {
-        alert("Failed to create group.");
+        alert(parsed?.message || "Failed to create group.");
       }
     } catch (err) {
       console.error("Create group failed:", err);
@@ -121,21 +113,25 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       const res = await fetch(`${API_BASE}/groups/add`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          groupid: selectedGroup.groupid,
-          username: userid,
-        }),
+        body: JSON.stringify({ groupid: selectedGroup.groupid, username: userid }),
       });
 
       const raw = await res.json();
       const data = typeof raw.body === "string" ? JSON.parse(raw.body) : raw;
 
       if (data.success) {
-        setSelectedGroup({
-          ...selectedGroup,
-          members: data.members,
-        });
-        loadData();
+        const updatedMembers = data.members || [];
+        setSelectedGroup((prev) =>
+          prev ? { ...prev, members: updatedMembers } : prev
+        );
+        // also refresh global list so sidebar stays in sync
+        setGroups((prev) =>
+          prev.map((g) =>
+            g.groupid === selectedGroup.groupid ? { ...g, members: updatedMembers } : g
+          )
+        );
+      } else {
+        alert(data.message || "Failed to add member.");
       }
     } catch (err) {
       console.error("Add member failed:", err);
@@ -150,30 +146,36 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       const res = await fetch(`${API_BASE}/groups/remove`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          groupid: selectedGroup.groupid,
-          username: userid,
-        }),
+        body: JSON.stringify({ groupid: selectedGroup.groupid, username: userid }),
       });
 
       const raw = await res.json();
       const data = typeof raw.body === "string" ? JSON.parse(raw.body) : raw;
 
       if (data.success) {
-        setSelectedGroup({
-          ...selectedGroup,
-          members: data.members,
-        });
-        loadData();
+        const updatedMembers = data.members || [];
+        setSelectedGroup((prev) =>
+          prev ? { ...prev, members: updatedMembers } : prev
+        );
+        setGroups((prev) =>
+          prev.map((g) =>
+            g.groupid === selectedGroup.groupid ? { ...g, members: updatedMembers } : g
+          )
+        );
+      } else {
+        alert(data.message || "Failed to remove member.");
       }
     } catch (err) {
       console.error("Remove member failed:", err);
     }
   }
 
-  // ✏️ Rename Group
+  // ✏️ Rename group
   async function handleRenameGroup() {
-    if (!selectedGroup || !selectedGroup.newName?.trim()) return;
+    if (!selectedGroup || !manageGroupName.trim()) {
+      alert("Please enter a new group name.");
+      return;
+    }
 
     try {
       const res = await fetch(`${API_BASE}/groups/rename`, {
@@ -181,7 +183,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           groupid: selectedGroup.groupid,
-          newName: selectedGroup.newName,
+          newName: manageGroupName,
         }),
       });
 
@@ -189,20 +191,31 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       const data = typeof raw.body === "string" ? JSON.parse(raw.body) : raw;
 
       if (data.success) {
-        alert("Group renamed!");
-        setShowManageModal(false);
-        loadData();
+        const newName = manageGroupName.trim();
+        // update local state
+        setSelectedGroup((prev) => (prev ? { ...prev, groupname: newName } : prev));
+        setGroups((prev) =>
+          prev.map((g) =>
+            g.groupid === selectedGroup.groupid ? { ...g, groupname: newName } : g
+          )
+        );
+        alert("Group renamed.");
+      } else {
+        alert(data.message || "Failed to rename group.");
       }
     } catch (err) {
-      console.error("Rename failed:", err);
+      console.error("Rename group failed:", err);
+      alert("Error renaming group.");
     }
   }
 
-  // 🗑 Delete Group
+  // 🗑 Delete group
   async function handleDeleteGroup() {
     if (!selectedGroup) return;
-
-    if (!window.confirm("Are you sure you want to delete this group?")) return;
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete group "${selectedGroup.groupname}"?`
+    );
+    if (!confirmDelete) return;
 
     try {
       const res = await fetch(`${API_BASE}/groups/delete`, {
@@ -215,17 +228,29 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       const data = typeof raw.body === "string" ? JSON.parse(raw.body) : raw;
 
       if (data.success) {
-        alert("Group deleted!");
+        // remove from local list
+        setGroups((prev) =>
+          prev.filter((g) => g.groupid !== selectedGroup.groupid)
+        );
+        // clear active selection if it was this group
+        if (activeChat === `group-${selectedGroup.groupid}`) {
+          setActiveChat(null);
+          onSelectUser(null);
+        }
+        setSelectedGroup(null);
         setShowManageModal(false);
-        loadData();
+        alert("Group deleted.");
+      } else {
+        alert(data.message || "Failed to delete group.");
       }
     } catch (err) {
       console.error("Delete group failed:", err);
+      alert("Error deleting group.");
     }
   }
 
   /* =========================================================
-     LOGOUT
+     LOGOUT — now works properly
   ========================================================= */
   function logout() {
     localStorage.clear();
@@ -237,8 +262,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   ========================================================= */
   return (
     <aside className="fixed top-0 left-0 bottom-0 w-[320px] bg-white border-r border-slate-200 flex flex-col z-20">
-
-      {/* HEADER */}
+      {/* Header */}
       <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
         <img src="/logo.JPG" alt="CHATr Logo" className="w-40 rounded-md border" />
         <button onClick={logout} className="text-slate-500 hover:text-red-600">
@@ -246,7 +270,7 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         </button>
       </div>
 
-      {/* SEARCH */}
+      {/* Search */}
       <div className="p-3 border-b">
         <input
           type="text"
@@ -257,13 +281,12 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         />
       </div>
 
-      {/* GROUPS */}
+      {/* Groups */}
       <div className="p-3 border-b overflow-y-auto">
         <div className="flex justify-between items-center mb-2">
           <h2 className="font-semibold text-slate-600 text-sm flex items-center gap-2">
             <Users size={14} /> Groups
           </h2>
-
           <button
             onClick={() => setShowCreateModal(true)}
             className="bg-blue-500 text-white text-xs px-2 py-1 rounded hover:bg-blue-600"
@@ -284,10 +307,10 @@ export default function Sidebar({ onSelectUser, currentUser }) {
               >
                 {g.groupname}
               </button>
-
               <button
                 onClick={() => {
-                  setSelectedGroup({ ...g, newName: g.groupname });
+                  setSelectedGroup(g);
+                  setManageGroupName(g.groupname || g.groupName || "");
                   setShowManageModal(true);
                 }}
                 className="text-gray-500 hover:text-blue-600"
@@ -301,10 +324,9 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         )}
       </div>
 
-      {/* MEMBERS */}
+      {/* Members */}
       <div className="p-3 border-b flex-1 overflow-y-auto">
         <h2 className="font-semibold text-slate-600 text-sm mb-2">👤 Members</h2>
-
         {members
           .filter((m) => (m.profileName || "").toLowerCase().includes(search.toLowerCase()))
           .map((m) => (
@@ -328,7 +350,6 @@ export default function Sidebar({ onSelectUser, currentUser }) {
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white w-[360px] rounded-lg shadow-xl p-5 relative">
-
             <button
               className="absolute top-3 right-3 text-gray-500 hover:text-red-500"
               onClick={() => setShowCreateModal(false)}
@@ -388,35 +409,43 @@ export default function Sidebar({ onSelectUser, currentUser }) {
               <X size={18} />
             </button>
 
-            <h3 className="text-lg font-semibold mb-3">Manage Group</h3>
+            <h3 className="text-lg font-semibold mb-3">
+              Manage Group — {selectedGroup.groupname}
+            </h3>
 
             {/* Rename */}
-            <label className="text-sm font-medium">Rename Group</label>
-            <div className="flex gap-2 mt-1 mb-4">
-              <input
-                type="text"
-                className="flex-1 border rounded px-2 py-2 text-sm"
-                value={selectedGroup.newName}
-                onChange={(e) =>
-                  setSelectedGroup({ ...selectedGroup, newName: e.target.value })
-                }
-              />
-              <button
-                onClick={handleRenameGroup}
-                className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 flex items-center gap-1"
-              >
-                <Save size={14} /> Save
-              </button>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                Rename Group
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={manageGroupName}
+                  onChange={(e) => setManageGroupName(e.target.value)}
+                  className="flex-1 border px-3 py-2 rounded-md text-sm"
+                />
+                <button
+                  onClick={handleRenameGroup}
+                  className="flex items-center gap-1 bg-blue-600 text-white text-xs px-3 py-2 rounded hover:bg-blue-700"
+                >
+                  <Save size={14} />
+                  Save
+                </button>
+              </div>
             </div>
 
-            {/* Members */}
+            {/* Members List */}
             <div className="mb-4">
               <h4 className="font-semibold text-sm mb-2 text-gray-700">👥 Members</h4>
 
               {selectedGroup.members?.length ? (
                 selectedGroup.members.map((m) => (
-                  <div key={m} className="flex justify-between items-center py-1 border-b">
-                    <span>{m}</span>
+                  <div
+                    key={m}
+                    className="flex justify-between items-center py-1 border-b"
+                  >
+                    <span className="text-sm">{m}</span>
                     <button
                       className="text-red-500 hover:text-red-700 text-xs"
                       onClick={() => handleRemoveMember(m)}
@@ -426,21 +455,28 @@ export default function Sidebar({ onSelectUser, currentUser }) {
                   </div>
                 ))
               ) : (
-                <p className="text-gray-400 text-sm italic">No members</p>
+                <p className="text-gray-400 text-sm italic">No members in group</p>
               )}
             </div>
 
-            {/* Add member */}
+            {/* Add New Member */}
             <div className="mb-4">
               <h4 className="font-semibold text-sm mb-2 text-gray-700">➕ Add Member</h4>
 
               <select
                 className="w-full border rounded px-2 py-2 text-sm"
-                onChange={(e) => handleAddMember(e.target.value)}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleAddMember(e.target.value);
+                    e.target.value = "";
+                  }
+                }}
               >
                 <option value="">Select a member...</option>
                 {members
-                  .filter((m) => !selectedGroup.members.includes(m.userid))
+                  .filter(
+                    (m) => !(selectedGroup.members || []).includes(m.userid)
+                  )
                   .map((m) => (
                     <option key={m.userid} value={m.userid}>
                       {m.profileName}
@@ -449,13 +485,22 @@ export default function Sidebar({ onSelectUser, currentUser }) {
               </select>
             </div>
 
-            {/* Delete Group */}
-            <button
-              onClick={handleDeleteGroup}
-              className="w-full bg-red-600 text-white py-2 rounded hover:bg-red-700 flex justify-center items-center gap-1"
-            >
-              <Trash2 size={16} /> Delete Group
-            </button>
+            {/* Footer actions */}
+            <div className="flex justify-between mt-4 gap-2">
+              <button
+                className="flex items-center gap-1 bg-red-600 text-white text-sm px-3 py-2 rounded-md hover:bg-red-700"
+                onClick={handleDeleteGroup}
+              >
+                <Trash2 size={14} />
+                Delete Group
+              </button>
+              <button
+                className="bg-gray-300 text-gray-800 text-sm px-3 py-2 rounded-md hover:bg-gray-400"
+                onClick={() => setShowManageModal(false)}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
