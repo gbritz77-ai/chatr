@@ -33,12 +33,20 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   const profileName = localStorage.getItem("profileName") || currentUser;
 
   /* =========================================================
-     Load Members + Groups
-  ========================================================= */
-  async function loadData() {
+   Load Members + Groups (with Bob's Deep Debugging)
+========================================================= */
+async function loadData() {
+  console.log("🔵 [Sidebar] Starting loadData()...");
+
   try {
-    // --- MEMBERS ---
+    /* -----------------------------------------------------
+       🔷 1. LOAD MEMBERS
+    ----------------------------------------------------- */
+    console.log("🔍 [Members] Fetching /members...");
     const res = await getMembers();
+
+    console.log("📦 [Members] Raw getMembers() response:", res);
+
     const parsed =
       typeof res === "string"
         ? JSON.parse(res)
@@ -46,28 +54,83 @@ export default function Sidebar({ onSelectUser, currentUser }) {
         ? JSON.parse(res.body)
         : res;
 
-    const membersData = Array.isArray(parsed.items) ? parsed.items : [];
+    console.log("🧩 [Members] Parsed response:", parsed);
+
+    // Which keys exist?
+    console.log("🔑 [Members] Keys in response:", Object.keys(parsed || {}));
+
+    let membersData = [];
+
+    if (Array.isArray(parsed.items)) {
+      membersData = parsed.items;
+      console.log("✅ [Members] Using parsed.items (array), length =", parsed.items.length);
+    } else if (Array.isArray(parsed.members)) {
+      membersData = parsed.members;
+      console.log("⚠️ [Members] Using parsed.members (legacy key), length =", parsed.members.length);
+    } else if (Array.isArray(parsed.Items)) {
+      membersData = parsed.Items;
+      console.log("⚠️ [Members] Using parsed.Items (Dynamo style), length =", parsed.Items.length);
+    } else {
+      console.warn("❌ [Members] No valid array found in response!");
+    }
+
     setMembers(membersData);
 
-    // --- GROUPS ---
-    const groupRes = await fetch(`${API_BASE}/groups`);
-    const groupRaw = await groupRes.json();
-    const groupParsed =
-      typeof groupRaw?.body === "string" ? JSON.parse(groupRaw.body) : groupRaw;
+    if (membersData.length === 0) {
+      console.warn("⚠️ [Members] Loaded EMPTY list of members!");
+    }
 
-    const groupsData = Array.isArray(groupParsed.items)
-      ? groupParsed.items.map((g) => ({
-          ...g,
-          groupname: g.groupName || g.groupname,
-        }))
-      : [];
+    /* -----------------------------------------------------
+       🔷 2. LOAD GROUPS
+    ----------------------------------------------------- */
+    console.log("🔍 [Groups] Fetching /groups...");
+    const groupRes = await fetch(`${API_BASE}/groups`);
+    const groupRaw = await groupRes.text();
+
+    console.log("📦 [Groups] Raw fetch text:", groupRaw);
+
+    let groupParsed;
+    try {
+      groupParsed = JSON.parse(groupRaw);
+    } catch {
+      console.error("❌ [Groups] Failed to parse JSON:", groupRaw);
+      groupParsed = {};
+    }
+
+    console.log("🧩 [Groups] Parsed JSON:", groupParsed);
+    console.log("🔑 [Groups] Keys in response:", Object.keys(groupParsed || {}));
+
+    let groupsData = [];
+
+    if (Array.isArray(groupParsed.items)) {
+      groupsData = groupParsed.items;
+      console.log("✅ [Groups] Using groupParsed.items, length =", groupParsed.items.length);
+    } else if (Array.isArray(groupParsed.groups)) {
+      groupsData = groupParsed.groups;
+      console.log("⚠️ [Groups] Using groupParsed.groups (legacy key), length =", groupParsed.groups.length);
+    } else {
+      console.warn("❌ [Groups] No valid array found in response!");
+    }
+
+    // Normalize groupname field
+    groupsData = groupsData.map((g) => ({
+      ...g,
+      groupname: g.groupName || g.groupname || g.name || "Unnamed Group",
+    }));
 
     setGroups(groupsData);
 
+    if (groupsData.length === 0) {
+      console.warn("⚠️ [Groups] Loaded EMPTY list of groups!");
+    }
+
   } catch (err) {
-    console.error("Sidebar load error:", err);
+    console.error("❌ [Sidebar] loadData() FAILED:", err);
   }
+
+  console.log("🟢 [Sidebar] Finished loadData()");
 }
+
 
 
   /* =========================================================
