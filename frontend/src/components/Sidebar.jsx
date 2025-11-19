@@ -34,20 +34,13 @@ export default function Sidebar({ onSelectUser, currentUser }) {
 
   console.log("🎉 Sidebar Mounted!");
 
-  /* =========================================================
-   Load Members + Groups (with Bob's Deep Debugging)
-========================================================= */
-async function loadData() {
-  console.log("🔵 [Sidebar] Starting loadData()...");
+ async function loadData() {
+  console.log("📥 loadData() started...");
 
   try {
-    /* -----------------------------------------------------
-       🔷 1. LOAD MEMBERS
-    ----------------------------------------------------- */
-    console.log("🔍 [Members] Fetching /members...");
+    console.log("📥 Calling getMembers()...");
     const res = await getMembers();
-
-    console.log("📦 [Members] Raw getMembers() response:", res);
+    console.log("📥 getMembers() returned:", res);
 
     const parsed =
       typeof res === "string"
@@ -56,82 +49,40 @@ async function loadData() {
         ? JSON.parse(res.body)
         : res;
 
-    console.log("🧩 [Members] Parsed response:", parsed);
+    console.log("📥 Parsed members response:", parsed);
 
-    // Which keys exist?
-    console.log("🔑 [Members] Keys in response:", Object.keys(parsed || {}));
-
-    let membersData = [];
-
-    if (Array.isArray(parsed.items)) {
-      membersData = parsed.items;
-      console.log("✅ [Members] Using parsed.items (array), length =", parsed.items.length);
-    } else if (Array.isArray(parsed.members)) {
-      membersData = parsed.members;
-      console.log("⚠️ [Members] Using parsed.members (legacy key), length =", parsed.members.length);
-    } else if (Array.isArray(parsed.Items)) {
-      membersData = parsed.Items;
-      console.log("⚠️ [Members] Using parsed.Items (Dynamo style), length =", parsed.Items.length);
-    } else {
-      console.warn("❌ [Members] No valid array found in response!");
-    }
+    const membersData = parsed?.members || parsed?.Items || [];
+    console.log("📥 Final membersData:", membersData);
 
     setMembers(membersData);
 
-    if (membersData.length === 0) {
-      console.warn("⚠️ [Members] Loaded EMPTY list of members!");
-    }
-
-    /* -----------------------------------------------------
-       🔷 2. LOAD GROUPS
-    ----------------------------------------------------- */
-    console.log("🔍 [Groups] Fetching /groups...");
+    // GROUPS
+    console.log("📥 Fetching groups...");
     const groupRes = await fetch(`${API_BASE}/groups`);
-    const groupRaw = await groupRes.text();
+    const groupRaw = await groupRes.json();
+    console.log("📥 Raw groups:", groupRaw);
 
-    console.log("📦 [Groups] Raw fetch text:", groupRaw);
+    const groupParsed =
+      typeof groupRaw?.body === "string"
+        ? JSON.parse(groupRaw.body)
+        : groupRaw;
 
-    let groupParsed;
-    try {
-      groupParsed = JSON.parse(groupRaw);
-    } catch {
-      console.error("❌ [Groups] Failed to parse JSON:", groupRaw);
-      groupParsed = {};
-    }
+    console.log("📥 Parsed groups:", groupParsed);
 
-    console.log("🧩 [Groups] Parsed JSON:", groupParsed);
-    console.log("🔑 [Groups] Keys in response:", Object.keys(groupParsed || {}));
+    const fixedGroups =
+      groupParsed?.groups?.map((g) => ({
+        ...g,
+        groupname: g.groupName || g.groupname,
+      })) || [];
 
-    let groupsData = [];
+    console.log("📥 Final groups:", fixedGroups);
 
-    if (Array.isArray(groupParsed.items)) {
-      groupsData = groupParsed.items;
-      console.log("✅ [Groups] Using groupParsed.items, length =", groupParsed.items.length);
-    } else if (Array.isArray(groupParsed.groups)) {
-      groupsData = groupParsed.groups;
-      console.log("⚠️ [Groups] Using groupParsed.groups (legacy key), length =", groupParsed.groups.length);
-    } else {
-      console.warn("❌ [Groups] No valid array found in response!");
-    }
-
-    // Normalize groupname field
-    groupsData = groupsData.map((g) => ({
-      ...g,
-      groupname: g.groupName || g.groupname || g.name || "Unnamed Group",
-    }));
-
-    setGroups(groupsData);
-
-    if (groupsData.length === 0) {
-      console.warn("⚠️ [Groups] Loaded EMPTY list of groups!");
-    }
-
+    setGroups(fixedGroups);
   } catch (err) {
-    console.error("❌ [Sidebar] loadData() FAILED:", err);
+    console.log("🔥 loadData() FAILED:", err);
   }
-
-  console.log("🟢 [Sidebar] Finished loadData()");
 }
+
 
 
 
