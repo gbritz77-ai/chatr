@@ -43,113 +43,65 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
-     🔗 Get Signed URL for attachments
-  ---------------------------------------------------- */
-  async function getSignedUrl(fileKey) {
-    try {
-      const res = await postJSON("/presign-download", { key: fileKey });
-      return res?.viewURL || null;
-    } catch (err) {
-      console.error("❌ Failed to get signed download URL:", err);
-      return null;
-    }
+   🔗 Get Signed URL for attachments (FIXED)
+---------------------------------------------------- */
+async function getSignedUrl(fileKey) {
+  try {
+    const res = await postJSON("/presign-download", { key: fileKey });
+    return res?.url || null; // ⭐ backend returns 'url'
+  } catch (err) {
+    console.error("❌ Failed to get signed download URL:", err);
+    return null;
   }
+}
+
+
 
   /* ----------------------------------------------------
-     LOAD MESSAGES
-  ---------------------------------------------------- */
-  async function loadMessages() {
-    if (!activeUser || !currentUser) return;
+   LOAD MESSAGES — Final Correct Version (Bob 2025)
+---------------------------------------------------- */
+async function loadMessages() {
+  if (!activeUser || !currentUser) return;
 
-    try {
-      let url = "";
-      if (activeUser?.type === "group") {
-        url = `/messages?groupid=${encodeURIComponent(activeUser.id)}`;
-      } else if (activeUser?.type === "user") {
-        const userB = activeUser.username || activeUser.id;
-        const chatId = normalizeChatId(currentUser, userB);
-        url = `/messages?chatId=${encodeURIComponent(chatId)}`;
-      }
+  try {
+    let chatId = null;
 
-      if (!url) return;
-
-      const res = await getJSON(url);
-      let data = typeof res?.body === "string" ? JSON.parse(res.body) : res;
-
-      //console.log("📨 Loaded messages response:", data);
-
-      const msgs =
-        Array.isArray(data.items)
-          ? data.items
-          : Array.isArray(data.messages)
-          ? data.messages
-          : [];
-
-      setMessages(msgs);
-    } catch (err) {
-      console.error("❌ Error loading messages:", err);
-      setMessages([]);
-    }
-  }
-
-  /* Auto reload every 3 seconds */
-  useEffect(() => {
-    if (!activeUser || !currentUser) return;
-    loadMessages();
-    const interval = setInterval(loadMessages, 3000);
-    return () => clearInterval(interval);
-  }, [activeUser, currentUser]);
-
-  /* ----------------------------------------------------
-     MARK AS READ
-  ---------------------------------------------------- */
-  async function markAsRead() {
-    if (!activeUser || !currentUser) return;
-
-    try {
-      const chatid =
-        activeUser?.type === "group"
-          ? `GROUP#${activeUser.id}`
-          : normalizeChatId(currentUser, activeUser.username || activeUser.id);
-
-      await postJSON("/messages/mark-read", { chatid, username: currentUser });
-      setLastReadTimestamp(new Date().toISOString());
-    } catch (err) {
-      console.error("❌ Failed to mark chat as read:", err);
-    }
-  }
-
-  /* ----------------------------------------------------
-     TYPING INDICATOR
-  ---------------------------------------------------- */
-  function handleTypingChange(e) {
-    setText(e.target.value);
-
-    if (!isTyping && activeUser) {
-      setIsTyping(true);
-      postJSON("/typing/start", {
-        username: currentUser,
-        chatid:
-          activeUser?.type === "group"
-            ? `GROUP#${activeUser.id}`
-            : normalizeChatId(currentUser, activeUser.username || activeUser.id),
-      });
+    if (activeUser?.type === "group") {
+      // GROUP CHAT
+      chatId = `GROUP#${activeUser.id}`;
+    } else if (activeUser?.type === "user") {
+      // DIRECT MESSAGE CHAT
+      const userB = activeUser.username || activeUser.id || activeUser.email;
+      chatId = normalizeChatId(currentUser, userB);
     }
 
-    clearTimeout(typingTimer.current);
-    typingTimer.current = setTimeout(() => {
-      setIsTyping(false);
-      if (activeUser) {
-        postJSON("/typing/stop", {
-          username: currentUser,
-          chatid:
-            activeUser?.type === "group"
-              ? `GROUP#${activeUser.id}`
-              : normalizeChatId(currentUser, activeUser.username || activeUser.id),
-        });
-      }
-    }, 2000);
+    if (!chatId) return;
+
+    const url = `/messages?chatId=${encodeURIComponent(chatId)}`;
+
+    const res = await getJSON(url);
+    const data =
+      typeof res?.body === "string" ? JSON.parse(res.body) : res;
+
+    //console.log("📨 Loaded messages response:", data);
+
+    const msgs = Array.isArray(data.items) ? data.items : [];
+
+    setMessages(msgs);
+  } catch (err) {
+    console.error("❌ Error loading messages:", err);
+    setMessages([]);
   }
+}
+
+/* Auto reload every 3 seconds */
+useEffect(() => {
+  if (!activeUser || !currentUser) return;
+  loadMessages();
+  const interval = setInterval(loadMessages, 3000);
+  return () => clearInterval(interval);
+}, [activeUser, currentUser]);
+
 
   /* ----------------------------------------------------
      AUTO-SCROLL
@@ -167,97 +119,111 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }, [messages]);
 
   /* ----------------------------------------------------
-     SEND MESSAGE — fixed, perfect version
+   SEND MESSAGE — Bob's Final, Correct, Stable Version
+---------------------------------------------------- */
+async function sendMessage(e) {
+  e.preventDefault();
+
+  // Prevent sending nothing
+  if (!text.trim() && !attachment) return;
+
+  setUploading(true);
+
+  const timestamp = new Date().toISOString();
+
+  /* ----------------------------------------------------
+     RESOLVE RECIPIENT / GROUP / CHAT ID
   ---------------------------------------------------- */
-  async function sendMessage(e) {
-    e.preventDefault();
-    //console.log("🟢 sendMessage() triggered");
+  const isUser = activeUser?.type === "user";
+  const isGroup = activeUser?.type === "group";
 
-    if (!text.trim() && !attachment) return;
+  const recipientValue =
+    isUser
+      ? activeUser.username ||
+        activeUser.email ||
+        activeUser.id
+      : null;
 
-    setUploading(true);
+  const payload = {
+    sender: currentUser,
+    senderName: localStorage.getItem("profileName") || currentUser,
+    recipient: isUser ? recipientValue : null,
+    groupid: isGroup ? activeUser.id : null,
+    text: text.trim() || null, // allow null for attachment-only messages
+    timestamp,
+  };
 
-    const recipientValue =
-      activeUser?.type === "user"
-        ? activeUser.username || activeUser.id || activeUser.email
-        : null;
+  // Build chatId
+  if (isUser && recipientValue) {
+    payload.chatId = normalizeChatId(currentUser, recipientValue);
+  } else if (isGroup) {
+    payload.chatId = `GROUP#${activeUser.id}`;
+  }
 
-    const timestamp = new Date().toISOString();
-
-
-
-    const payload = {
-      sender: currentUser,
-      senderName: localStorage.getItem("profileName") || currentUser,
-      recipient: recipientValue,
-      groupid: activeUser?.type === "group" ? activeUser.id : null,
-      text: text.trim() || "",
-      timestamp,
-    };
-
-    payload.senderName = localStorage.getItem("profileName") || currentUser;
-
-    if (activeUser?.type === "user" && recipientValue) {
-      const chatId = normalizeChatId(currentUser, recipientValue);
-      payload.chatId = chatId;
-    } else if (activeUser?.type === "group") {
-      payload.chatId = `GROUP#${activeUser.id}`;
+  /* ----------------------------------------------------
+     ATTACHMENT LOGIC
+  ---------------------------------------------------- */
+  if (attachment) {
+    // GIF attachment
+    if (attachment.isGif && attachment.url) {
+      payload.attachmentType = "image/gif";
+      payload.attachmentKey = null;
+      payload.gifUrl = attachment.url;
     }
 
-    //console.log("📨 BASE PAYLOAD:", payload);
+    // File upload attachment
+    else if (attachment instanceof File) {
+      try {
+        const presignRes = await postJSON("/presign-upload", {
+          filename: attachment.name,
+          contentType: attachment.type,
+          filetype: attachment.type,
+        });
 
-    /* ----------------- FILE ATTACHMENT ----------------- */
-    if (attachment) {
-      //console.log("📎 Processing attachment:", attachment);
-
-      if (attachment.isGif && attachment.url) {
-          payload.attachmentType = "image/gif";
-          payload.attachmentKey = null;
-          payload.gifUrl = attachment.url;  // Frontend-rendered GIF
-        } else if (attachment instanceof File) {
-        try {
-          const presignRes = await postJSON("/presign-upload", {
-            filename: attachment.name,
-            contentType: attachment.type,
-            filetype: attachment.type,
+        if (presignRes?.uploadURL && presignRes?.fileKey) {
+          await fetch(presignRes.uploadURL, {
+            method: "PUT",
+            headers: { "Content-Type": attachment.type },
+            body: attachment,
           });
 
-          if (presignRes?.uploadURL && presignRes?.fileKey) {
-            await fetch(presignRes.uploadURL, {
-              method: "PUT",
-              headers: { "Content-Type": attachment.type },
-              body: attachment,
-            });
-
-            payload.attachmentKey = presignRes.fileKey;
-            payload.attachmentType = attachment.type;
-          }
-        } catch (err) {
-          console.error("🔥 Attachment upload failed:", err);
+          payload.attachmentKey = presignRes.fileKey;
+          payload.attachmentType = attachment.type;
         }
+      } catch (err) {
+        console.error("🔥 Attachment upload failed:", err);
       }
     }
-
-    //console.log("📨 FINAL PAYLOAD TO /messages:", payload);
-
-    try {
-      const res = await postJSON("/messages", payload);
-      const parsed = typeof res?.body === "string" ? JSON.parse(res.body) : res;
-
-      if (parsed?.success) {
-        setMessages((prev) => [...prev, parsed.item]);
-        setText("");
-        setAttachment(null);
-        setTimeout(() => loadMessages(), 500);
-      } else {
-        console.error("❌ Message send failed:", parsed?.message);
-      }
-    } catch (err) {
-      console.error("🔥 sendMessage error:", err);
-    }
-
-    setUploading(false);
   }
+
+  /* ----------------------------------------------------
+     SEND MESSAGE TO BACKEND
+  ---------------------------------------------------- */
+  try {
+    const res = await postJSON("/messages", payload);
+    const parsed =
+      typeof res?.body === "string" ? JSON.parse(res.body) : res;
+
+    if (parsed?.success) {
+      // Optimistic UI update
+      setMessages((prev) => [...prev, parsed.item]);
+
+      // Reset UI
+      setText("");
+      setAttachment(null);
+
+      // Refresh messages
+      setTimeout(() => loadMessages(), 300);
+    } else {
+      console.error("❌ Message send failed:", parsed?.message);
+    }
+  } catch (err) {
+    console.error("🔥 sendMessage error:", err);
+  }
+
+  setUploading(false);
+}
+
 
   /* ----------------------------------------------------
      RENDER — if no active chat selected
@@ -453,7 +419,10 @@ function MessageBubble({ msg, currentUser, getSignedUrl }) {
   // Attachment type checks
   const fileType = msg.attachmentType || "";
   const isImage = fileType.startsWith("image/") && fileType !== "image/gif";
-  const isGif = fileType === "image/gif" || (msg.gifUrl && msg.gifUrl.endsWith(".gif"));
+  const isGif =
+  fileType === "image/gif" ||
+  Boolean(msg.gifUrl);
+
   const isPDF = fileType === "application/pdf";
   const isOther = msg.attachmentKey && !isImage && !isGif && !isPDF;
 
