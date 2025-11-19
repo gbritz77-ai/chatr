@@ -32,6 +32,8 @@ export default function Sidebar({ onSelectUser, currentUser }) {
 
   const profileName = localStorage.getItem("profileName") || currentUser;
 
+  console.log("🎉 Sidebar Mounted!");
+
   /* =========================================================
    Load Members + Groups (with Bob's Deep Debugging)
 ========================================================= */
