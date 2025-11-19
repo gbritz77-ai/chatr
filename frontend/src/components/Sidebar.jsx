@@ -36,40 +36,39 @@ export default function Sidebar({ onSelectUser, currentUser }) {
      Load Members + Groups
   ========================================================= */
   async function loadData() {
-    try {
-      // Load Members
-      const res = await getMembers();
-      const parsed =
-        typeof res === "string"
-          ? JSON.parse(res)
-          : typeof res?.body === "string"
-          ? JSON.parse(res.body)
-          : res;
+  try {
+    // --- MEMBERS ---
+    const res = await getMembers();
+    const parsed =
+      typeof res === "string"
+        ? JSON.parse(res)
+        : typeof res?.body === "string"
+        ? JSON.parse(res.body)
+        : res;
 
-      const membersData = parsed?.members || parsed?.Items || [];
-      setMembers(membersData);
+    const membersData = Array.isArray(parsed.items) ? parsed.items : [];
+    setMembers(membersData);
 
-      // Load Groups
-      const groupRes = await fetch(`${API_BASE}/groups`);
-      const groupRaw = await groupRes.json();
-      const groupParsed =
-        typeof groupRaw?.body === "string" ? JSON.parse(groupRaw.body) : groupRaw;
+    // --- GROUPS ---
+    const groupRes = await fetch(`${API_BASE}/groups`);
+    const groupRaw = await groupRes.json();
+    const groupParsed =
+      typeof groupRaw?.body === "string" ? JSON.parse(groupRaw.body) : groupRaw;
 
-      const fixedGroups =
-        groupParsed?.groups?.map((g) => ({
+    const groupsData = Array.isArray(groupParsed.items)
+      ? groupParsed.items.map((g) => ({
           ...g,
           groupname: g.groupName || g.groupname,
-        })) || [];
+        }))
+      : [];
 
-      setGroups(fixedGroups);
-    } catch (err) {
-      console.error("Sidebar load error:", err);
-    }
+    setGroups(groupsData);
+
+  } catch (err) {
+    console.error("Sidebar load error:", err);
   }
+}
 
-  useEffect(() => {
-    loadData();
-  }, []);
 
   /* =========================================================
      CREATE GROUP
