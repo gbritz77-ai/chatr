@@ -1,9 +1,15 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback, // ✅ added
+} from "react";
 import { postJSON, getJSON } from "../lib/api";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
 import { Avatar } from "../components/Avatar";
 import GifPicker from "../components/GifPicker";
+
 import {
   Send,
   Smile,
@@ -11,29 +17,35 @@ import {
   Loader2,
   FileText,
   Image,
+  X,
 } from "lucide-react";
 
 /* ============================================================
-   💬 ChatWindow — fully stable version (Nov 2025)
+   💬 ChatWindow — WhatsApp style + attachment support
+   - Single attachment per message
+   - Supports:
+     • Text
+     • File upload via S3 (attachmentKey + attachmentType)
+     • GIF via gifUrl (no S3)
+   - Uses presign-download for viewing S3 files
+   - Caches signed URLs to avoid repeated calls
 ============================================================ */
 export default function ChatWindow({ activeUser, currentUser }) {
   const [text, setText] = useState("");
   const [messages, setMessages] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
-  const [attachment, setAttachment] = useState(null);
+  const [attachment, setAttachment] = useState(null); // File OR { isGif, url }
   const [uploading, setUploading] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
-  const [remoteTyping, setRemoteTyping] = useState(false);
-  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
 
-  const pickerRef = useRef(null);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+  const [signedUrlCache, setSignedUrlCache] = useState({}); // key -> url
+
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
-  const typingTimer = useRef(null);
 
   /* ----------------------------------------------------
-     Normalize Chat ID
+     Normalize Chat ID for DMs
   ---------------------------------------------------- */
   function normalizeChatId(userA, userB) {
     if (!userA || !userB) return "";
@@ -42,125 +54,77 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   /* ----------------------------------------------------
-     Get Signed URL for attachments  (FIXED!)
+     Signed URL helper (memoized + cache)
   ---------------------------------------------------- */
-  async function getSignedUrl(fileKey) {
-    if (!fileKey) return null;
+  const getSignedUrl = useCallback(
+    async (fileKey) => {
+      if (!fileKey) return null;
 
-    try {
-      const res = await postJSON("/presign-download", { key: fileKey });
-      return res?.viewURL || null;
-    } catch (err) {
-      console.error("❌ Failed to get signed download URL:", err);
-      return null;
-    }
-  }
+      // 1️⃣ Check cache
+      if (signedUrlCache[fileKey]) {
+        return signedUrlCache[fileKey];
+      }
+
+      try {
+        const res = await postJSON("/presign-download", { key: fileKey });
+        const url = res?.viewURL || res?.url || null;
+
+        if (url) {
+          setSignedUrlCache((prev) => ({
+            ...prev,
+            [fileKey]: url,
+          }));
+        }
+
+        return url;
+      } catch (err) {
+        console.error("❌ Signed URL error:", err);
+        return null;
+      }
+    },
+    [signedUrlCache] // ✅ stable identity, but updates when cache changes
+  );
 
   /* ----------------------------------------------------
-     LOAD MESSAGES
+     Load Messages
   ---------------------------------------------------- */
   async function loadMessages() {
     if (!activeUser || !currentUser) return;
 
     try {
       let url = "";
+
       if (activeUser.type === "group") {
-        url = `/messages?groupid=${encodeURIComponent(activeUser.id)}`;
+        // Group chat → by groupid
+        url = `/messages?chatId=${encodeURIComponent(`GROUP#${activeUser.id}`)}`;
+
       } else {
-        const userB = activeUser.username || activeUser.id;
-        const chatId = normalizeChatId(currentUser, userB);
+        // DM → by chatId
+        const other = activeUser.username || activeUser.id;
+        const chatId = normalizeChatId(currentUser, other);
         url = `/messages?chatId=${encodeURIComponent(chatId)}`;
       }
 
       const res = await getJSON(url);
-      let data = typeof res?.body === "string" ? JSON.parse(res.body) : res;
+      const data = typeof res?.body === "string" ? JSON.parse(res.body) : res;
 
-      const msgs =
-        Array.isArray(data.items)
-          ? data.items
-          : Array.isArray(data.messages)
-          ? data.messages
-          : [];
-
-      setMessages(msgs);
+      const items = data.items || data.messages || [];
+      setMessages(items);
     } catch (err) {
-      console.error("❌ Error loading messages:", err);
+      console.error("❌ Load messages error:", err);
       setMessages([]);
     }
   }
 
-  /* ----------------------------------------------------
-     ATTACHMENT URL INJECTION (FIXED!)
-  ---------------------------------------------------- */
   useEffect(() => {
-    async function injectUrls() {
-      const updated = [];
-
-      for (let m of messages) {
-        if (m.attachmentKey) {
-          const url = await getSignedUrl(m.attachmentKey);
-          updated.push({ ...m, attachmentUrl: url });
-        } else {
-          updated.push(m);
-        }
-      }
-
-      setMessages(updated);
+    if (activeUser) {
+      loadMessages();
     }
-
-    if (messages.length) injectUrls();
-  }, [messages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeUser?.id, activeUser?.type]);
 
   /* ----------------------------------------------------
-     MARK AS READ
-  ---------------------------------------------------- */
-  async function markAsRead() {
-    if (!activeUser) return;
-
-    try {
-      const chatid =
-        activeUser.type === "group"
-          ? `GROUP#${activeUser.id}`
-          : normalizeChatId(currentUser, activeUser.username || activeUser.id);
-
-      await postJSON("/messages/mark-read", { chatid, username: currentUser });
-    } catch (err) {
-      console.error("❌ Failed to mark chat as read:", err);
-    }
-  }
-
-  /* ----------------------------------------------------
-     TYPING INDICATOR
-  ---------------------------------------------------- */
-  function handleTypingChange(e) {
-    setText(e.target.value);
-
-    if (!isTyping && activeUser) {
-      setIsTyping(true);
-      postJSON("/typing/start", {
-        username: currentUser,
-        chatid:
-          activeUser.type === "group"
-            ? `GROUP#${activeUser.id}`
-            : normalizeChatId(currentUser, activeUser.username || activeUser.id),
-      });
-    }
-
-    clearTimeout(typingTimer.current);
-    typingTimer.current = setTimeout(() => {
-      setIsTyping(false);
-      postJSON("/typing/stop", {
-        username: currentUser,
-        chatid:
-          activeUser.type === "group"
-            ? `GROUP#${activeUser.id}`
-            : normalizeChatId(currentUser, activeUser.username || activeUser.id),
-      });
-    }, 2000);
-  }
-
-  /* ----------------------------------------------------
-     AUTO-SCROLL
+     Auto scroll behaviour
   ---------------------------------------------------- */
   function handleScroll() {
     const el = scrollContainerRef.current;
@@ -171,16 +135,21 @@ export default function ChatWindow({ activeUser, currentUser }) {
   }
 
   useEffect(() => {
-    if (autoScrollEnabled)
+    if (autoScrollEnabled) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    }
+  }, [messages, autoScrollEnabled]);
 
   /* ----------------------------------------------------
-     SEND MESSAGE
+     SEND MESSAGE (single attachment) — full flow
   ---------------------------------------------------- */
   async function sendMessage(e) {
     e.preventDefault();
-    if (!text.trim() && !attachment) return;
+
+    const hasText = text.trim().length > 0;
+    const hasAttachment = !!attachment;
+
+    if (!hasText && !hasAttachment) return;
 
     setUploading(true);
 
@@ -192,6 +161,7 @@ export default function ChatWindow({ activeUser, currentUser }) {
       groupid: activeUser.type === "group" ? activeUser.id : null,
     };
 
+    // DM vs GROUP routing
     if (activeUser.type === "user") {
       const recipient = activeUser.username || activeUser.id;
       payload.recipient = recipient;
@@ -200,37 +170,76 @@ export default function ChatWindow({ activeUser, currentUser }) {
       payload.chatId = `GROUP#${activeUser.id}`;
     }
 
-    /* FILE ATTACHMENT FIXED */
+    /* -----------------------------
+       Attachment handling
+    ----------------------------- */
     if (attachment) {
-      if (attachment.isGif) {
-        payload.attachmentType = "image/gif";
-        payload.gifUrl = attachment.url;
-      } else {
-        try {
+      try {
+        // 🎞 GIF via external URL (no S3 upload)
+        if (attachment.isGif) {
+          payload.attachmentKind = "gif";
+          payload.attachmentType = "image/gif";
+          payload.gifUrl = attachment.url;
+        } else {
+          // 📁 File upload → presign + S3 PUT
+          const file = attachment;
+
           const presign = await postJSON("/presign-upload", {
-            filename: attachment.name,
-            contentType: attachment.type,
+            filename: file.name,
+            contentType: file.type,
           });
 
-          await fetch(presign.uploadURL, {
+          if (!presign?.uploadURL || !presign?.key) {
+            console.error("❌ Invalid presign-upload:", presign);
+            throw new Error("Invalid presign-upload response");
+          }
+
+          // Upload file to S3
+          const uploadRes = await fetch(presign.uploadURL, {
             method: "PUT",
-            headers: { "Content-Type": attachment.type },
-            body: attachment,
+            headers: {
+              "Content-Type": file.type,
+            },
+            body: file,
           });
 
-          payload.attachmentKey = presign.fileKey;
-          payload.attachmentType = attachment.type;
-        } catch (err) {
-          console.error("🔥 Upload failed:", err);
+          if (!uploadRes.ok) {
+            console.error("❌ S3 upload error:", uploadRes.status);
+            throw new Error("S3 upload failed");
+          }
+
+          // Store attachment metadata on the message
+          payload.attachmentKey = presign.key;
+          payload.attachmentType = file.type;
+          payload.attachmentKind = file.type.startsWith("image/")
+            ? "image"
+            : file.type === "application/pdf"
+            ? "pdf"
+            : "file";
         }
+      } catch (err) {
+        console.error("🔥 Attachment upload failed:", err);
+        alert("Upload failed: " + err.message);
+        setUploading(false);
+        return;
       }
     }
 
-    const res = await postJSON("/messages", payload);
-    const parsed = typeof res?.body === "string" ? JSON.parse(res.body) : res;
+    /* ----------------------------------------------------
+       SAVE MESSAGE
+    ---------------------------------------------------- */
+    try {
+      const res = await postJSON("/messages", payload);
+      const parsed =
+        typeof res?.body === "string" ? JSON.parse(res.body) : res;
 
-    if (parsed.success) {
-      setMessages((prev) => [...prev, parsed.item]);
+      if (parsed?.success) {
+        await loadMessages();
+      } else {
+        console.error("❌ Save message failed:", parsed);
+      }
+    } catch (err) {
+      console.error("❌ POST /messages failed:", err);
     }
 
     setText("");
@@ -241,27 +250,25 @@ export default function ChatWindow({ activeUser, currentUser }) {
   /* ----------------------------------------------------
      RENDER
   ---------------------------------------------------- */
-  if (!activeUser)
+  if (!activeUser) {
     return (
       <div className="flex flex-1 items-center justify-center text-slate-400 italic">
         Select a contact or group to start chatting
       </div>
     );
+  }
 
   return (
     <div className="flex flex-col flex-1 h-screen ml-[320px] bg-slate-50 relative">
       {/* HEADER */}
       <div className="sticky top-0 z-10 border-b bg-white/70 p-4 font-semibold">
         <div className="flex items-center gap-3">
-          <Avatar seed={activeUser.name} username={activeUser.name} size={10} />
-          <div>
-            <div>{activeUser.name}</div>
-            {remoteTyping && (
-              <div className="text-xs text-slate-500 animate-pulse">
-                typing...
-              </div>
-            )}
-          </div>
+          <Avatar
+            seed={activeUser.name}
+            username={activeUser.name}
+            size={10}
+          />
+          <div>{activeUser.name}</div>
         </div>
       </div>
 
@@ -287,79 +294,237 @@ export default function ChatWindow({ activeUser, currentUser }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* INPUT */}
-      <ChatInput
-        text={text}
-        handleTypingChange={handleTypingChange}
-        sendMessage={sendMessage}
-        uploading={uploading}
-        setAttachment={setAttachment}
-        showEmojiPicker={showEmojiPicker}
-        setShowEmojiPicker={setShowEmojiPicker}
-        showGifPicker={showGifPicker}
-        setShowGifPicker={setShowGifPicker}
-      />
+      {/* ATTACHMENT PREVIEW (single) */}
+      {attachment && (
+        <div className="absolute bottom-24 left-10 w-[300px] z-50">
+          <div className="bg-white shadow rounded-xl p-3 flex items-center gap-3 border">
+            {/* Thumbnail */}
+            {attachment.isGif ? (
+              <img
+                src={attachment.url}
+                className="w-12 h-12 object-cover rounded"
+              />
+            ) : attachment.type?.startsWith("image/") ? (
+              <img
+                src={URL.createObjectURL(attachment)}
+                className="w-12 h-12 object-cover rounded border"
+              />
+            ) : (
+              <FileText size={24} />
+            )}
+
+            {/* Info */}
+            <div className="flex flex-col text-sm">
+              <span className="font-semibold truncate w-40">
+                {attachment.name || "GIF"}
+              </span>
+              {!attachment.isGif && attachment.size != null && (
+                <span className="text-xs text-slate-500">
+                  {(attachment.size / 1024).toFixed(1)} KB
+                </span>
+              )}
+            </div>
+
+            {/* Remove */}
+            <button
+              onClick={() => setAttachment(null)}
+              className="ml-auto bg-red-500 text-white rounded-full p-1"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* INPUT BAR */}
+      <div className="p-4 border-t bg-white">
+        <form
+          onSubmit={sendMessage}
+          className="flex items-center gap-2 relative"
+        >
+          {/* Emoji */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowGifPicker(false);
+              setShowEmojiPicker((v) => !v);
+            }}
+            className="p-2 hover:bg-slate-200 rounded-full"
+          >
+            <Smile size={20} />
+          </button>
+
+          {/* GIF */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowEmojiPicker(false);
+              setShowGifPicker((v) => !v);
+            }}
+            className="p-2 hover:bg-slate-200 rounded-full"
+          >
+            <Image size={20} />
+          </button>
+
+          {/* File picker */}
+          <label className="p-2 hover:bg-slate-200 rounded-full cursor-pointer">
+            <Paperclip size={20} />
+            <input
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) setAttachment(file);
+              }}
+            />
+          </label>
+
+          {/* Textbox */}
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Type a message..."
+            className="flex-1 border rounded-full px-4 py-2"
+          />
+
+          {/* Send */}
+          <button
+            type="submit"
+            disabled={uploading}
+            className="p-2 bg-blue-600 text-white rounded-full"
+          >
+            {uploading ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <Send size={18} />
+            )}
+          </button>
+        </form>
+
+        {/* Emoji Picker */}
+        {showEmojiPicker && (
+          <div className="absolute bottom-20 left-4 bg-white shadow-lg border rounded-lg z-50">
+            <Picker
+              data={data}
+              onEmojiSelect={(emoji) =>
+                setText((prev) => prev + (emoji.native || ""))
+              }
+            />
+          </div>
+        )}
+
+        {/* GIF Picker */}
+        {showGifPicker && (
+          <div className="absolute bottom-20 left-4 z-50">
+            <GifPicker
+              onSelect={(gifUrl) => {
+                setAttachment({ isGif: true, url: gifUrl });
+                setShowGifPicker(false);
+              }}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 /* ============================================================
-   💬 MessageBubble — FIXED ATTACHMENT DISPLAY
+   💬 MESSAGE BUBBLE — Handles text + attachments
 ============================================================ */
-function MessageBubble({ msg, currentUser, getSignedUrl }) {
-  const [url, setUrl] = useState(msg.attachmentUrl || null);
-
-  useEffect(() => {
-    if (!url && msg.attachmentKey) {
-      getSignedUrl(msg.attachmentKey).then((u) => setUrl(u));
-    }
-  }, [msg.attachmentKey]);
-
+function MessageBubble({ msg, currentUser, getSignedUrl, signedUrlCache }) {
   const isMine = msg.sender === currentUser;
 
-  const fileType = msg.attachmentType || "";
-  const isImage = fileType.startsWith("image/") && fileType !== "image/gif";
-  const isGif = fileType === "image/gif" || msg.gifUrl;
-  const isPDF = fileType === "application/pdf";
+  const legacy = msg.attachments?.[0] || null;
 
-  const displayUrl = msg.gifUrl || url;
+  const attachmentKey = msg.attachmentKey || legacy?.attachmentKey || null;
+  const attachmentType = msg.attachmentType || legacy?.attachmentType || "";
+  const gifUrl = msg.gifUrl || legacy?.gifUrl || null;
+
+  const isImage = attachmentType.startsWith("image/") && attachmentType !== "image/gif";
+  const isGif = !!gifUrl || attachmentType === "image/gif";
+  const isPDF = attachmentType === "application/pdf";
+
+  const [url, setUrl] = React.useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveUrl() {
+      // ✅ GIFs do not use presigned URLs
+      if (gifUrl) {
+        setUrl(gifUrl);
+        return;
+      }
+
+      if (!attachmentKey) return;
+
+      // ✅ Use cache FIRST
+      if (signedUrlCache?.[attachmentKey]) {
+        setUrl(signedUrlCache[attachmentKey]);
+        return;
+      }
+
+      const signed = await getSignedUrl(attachmentKey);
+      if (!cancelled) setUrl(signed);
+    }
+
+    resolveUrl();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [attachmentKey, gifUrl]); // 🔥 IMPORTANT: no getSignedUrl dependency
 
   return (
     <div className={`flex flex-col ${isMine ? "items-end" : "items-start"}`}>
       {!isMine && (
-        <div className="text-xs text-slate-500">{msg.senderName}</div>
+        <div className="text-xs text-slate-500 mb-1">{msg.senderName}</div>
       )}
 
       <div
-        className={`p-3 rounded-lg max-w-[70%] ${
+        className={`p-3 rounded-2xl max-w-[70%] shadow-sm ${
           isMine ? "bg-blue-600 text-white" : "bg-white border"
         }`}
       >
-        {msg.text && <div>{msg.text}</div>}
+        {msg.text && <div className="whitespace-pre-wrap">{msg.text}</div>}
 
-        {displayUrl && isGif && (
-          <img src={displayUrl} className="max-h-64 rounded mt-2 border" />
+        {/* Image / GIF */}
+        {url && (isImage || isGif) && (
+          <img
+            src={url}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            className="max-h-64 rounded-xl mt-2 border bg-white"
+            alt="attachment"
+          />
         )}
 
-        {displayUrl && isImage && (
-          <img src={displayUrl} className="max-h-64 rounded mt-2 border" />
-        )}
-
-        {displayUrl && isPDF && (
+        {/* PDF */}
+        {url && isPDF && (
           <a
-            href={displayUrl}
+            href={url}
             target="_blank"
-            className="flex items-center gap-2 mt-2 p-2 border rounded"
+            rel="noreferrer"
+            className={`flex items-center gap-2 mt-2 px-3 py-2 rounded-xl border ${
+              isMine ? "bg-white text-black" : "bg-slate-50"
+            }`}
           >
             <FileText size={16} />
-            Download PDF
+            <span className="text-xs font-medium truncate">
+              Open PDF document
+            </span>
           </a>
         )}
 
-        <div className="text-xs opacity-70 mt-2">
-          {new Date(msg.timestamp).toLocaleTimeString()}
+        <div className="text-[10px] opacity-70 mt-2 text-right">
+          {msg.timestamp
+            ? new Date(msg.timestamp).toLocaleTimeString()
+            : ""}
         </div>
       </div>
     </div>
   );
 }
+
