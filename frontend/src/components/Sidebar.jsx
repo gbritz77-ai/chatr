@@ -25,41 +25,34 @@ export default function Sidebar({ onSelectUser, currentUser }) {
   const profileName = localStorage.getItem("profileName") || currentUser;
 
   /* =========================================================
-     UNREAD COUNTS — WITH RESPONSE FIX
-  ========================================================= */
-  async function loadUnread() {
-    const url = `${API_BASE}/messages/unread-counts?username=${currentUser}`;
-    //console.log("🟦 UNREAD DEBUG — Fetching unread counts:", url);
+   UNREAD COUNTS — FIXED FOR NEW API
+========================================================= */
+async function loadUnread() {
+  try {
+    const res = await fetch(
+      `${API_BASE}/messages/unread-counts?member=${encodeURIComponent(currentUser)}`
+    );
 
-    try {
-      const res = await fetch(url);
-      const json = await res.json();
+    const raw = await res.json();
+    const data =
+      typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
 
-      const data =
-        typeof json?.body === "string" ? JSON.parse(json.body) : json;
-
-      //console.log("🟦 UNREAD DEBUG — Parsed unread:", data);
-
-      if (!data?.success) {
-        console.warn("🟥 unread failed:", data);
-        return;
-      }
-
-      const rawUnread = data.unread || {};
-
-      const normalized = {};
-
-      for (const sender of Object.keys(rawUnread)) {
-        const key = `user-${sender.toLowerCase()}`;
-        normalized[key] = rawUnread[sender];
-      }
-
-      //console.log("🟦 FINAL unread:", normalized);
-      setUnread(normalized);
-    } catch (err) {
-      console.error("🟥 unread fetch failed:", err);
+    if (!data?.success) {
+      console.warn("Unread fetch failed:", data);
+      return;
     }
+
+    const map = {};
+    (data.counts || []).forEach(({ chatId, unread }) => {
+      map[chatId] = unread;
+    });
+
+    setUnread(map);
+  } catch (err) {
+    console.error("Unread fetch error:", err);
   }
+}
+
 
   /* =========================================================
      LOAD MEMBERS + GROUPS
