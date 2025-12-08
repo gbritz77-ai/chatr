@@ -24,8 +24,8 @@ export default function Sidebar({ onSelectUser, currentUser }) {
 
   const profileName = localStorage.getItem("profileName") || currentUser;
 
-  /* =========================================================
-   UNREAD COUNTS — FIXED FOR NEW API
+ /* =========================================================
+   UNREAD COUNTS — OBJECT FORMAT (FIXED)
 ========================================================= */
 async function loadUnread() {
   try {
@@ -42,16 +42,13 @@ async function loadUnread() {
       return;
     }
 
-    const map = {};
-    (data.counts || []).forEach(({ chatId, unread }) => {
-      map[chatId] = unread;
-    });
-
-    setUnread(map);
+    // ✅ counts is already a map: { chatId: number }
+    setUnread(prev => ({ ...prev, [chatId]: 0 }));
   } catch (err) {
     console.error("Unread fetch error:", err);
   }
 }
+
 
 
   /* =========================================================
