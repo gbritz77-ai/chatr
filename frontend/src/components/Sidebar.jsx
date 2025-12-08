@@ -24,32 +24,32 @@ export default function Sidebar({ onSelectUser, currentUser }) {
 
   const profileName = localStorage.getItem("profileName") || currentUser;
 
- /* =========================================================
-   UNREAD COUNTS — OBJECT FORMAT (FIXED)
-========================================================= */
-async function loadUnread() {
-  try {
-    const res = await fetch(
-      `${API_BASE}/messages/unread-counts?member=${encodeURIComponent(currentUser)}`
-    );
+  /* =========================================================
+     UNREAD COUNTS — OBJECT FORMAT (chatId → count)
+  ========================================================= */
+  async function loadUnread() {
+    try {
+      const res = await fetch(
+        `${API_BASE}/messages/unread-counts?member=${encodeURIComponent(
+          currentUser
+        )}`
+      );
 
-    const raw = await res.json();
-    const data =
-      typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
+      const raw = await res.json();
+      const data =
+        typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
 
-    if (!data?.success) {
-      console.warn("Unread fetch failed:", data);
-      return;
+      if (!data?.success) {
+        console.warn("Unread fetch failed:", data);
+        return;
+      }
+
+      // counts: { [chatId]: number }
+      setUnread(data.counts || {});
+    } catch (err) {
+      console.error("Unread fetch error:", err);
     }
-
-    // ✅ counts is already a map: { chatId: number }
-    setUnread(prev => ({ ...prev, [chatId]: 0 }));
-  } catch (err) {
-    console.error("Unread fetch error:", err);
   }
-}
-
-
 
   /* =========================================================
      LOAD MEMBERS + GROUPS
@@ -69,8 +69,8 @@ async function loadUnread() {
 
       // Groups
       const groupRes = await fetch(
-  `${API_BASE}/groups?username=${encodeURIComponent(currentUser)}`
-);
+        `${API_BASE}/groups?username=${encodeURIComponent(currentUser)}`
+      );
 
       const groupRaw = await groupRes.json();
       const groupParsed =
@@ -95,136 +95,125 @@ async function loadUnread() {
   useEffect(() => {
     loadData();
     loadUnread();
-  }, []);
+  }, [currentUser]);
 
+  /* =========================================================
+     CREATE GROUP
+  ========================================================= */
   async function handleCreateGroup() {
-  //console.log("🟢 CREATE GROUP CLICKED");
-
-  if (!newGroupName.trim()) {
-    console.warn("❌ No group name");
-    alert("Please enter a group name.");
-    return;
-  }
-
-  const payload = {
-    groupName: newGroupName.trim(),
-    creator: currentUser,
-    members: selectedMembers,
-  };
-
-  ////console.log("📤 CREATE GROUP PAYLOAD:", payload);
-
-  try {
-    const res = await fetch(`${API_BASE}/groups`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    ////console.log("📡 CREATE GROUP STATUS:", res.status);
-
-    const raw = await res.json();
-    ////console.log("📥 CREATE GROUP RAW RESPONSE:", raw);
-
-    const parsed =
-      typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
-
-    ////console.log("✅ CREATE GROUP PARSED:", parsed);
-
-    if (!parsed.success) {
-      alert(parsed.message || "Failed to create group");
+    if (!newGroupName.trim()) {
+      console.warn("❌ No group name");
+      alert("Please enter a group name.");
       return;
     }
 
-    // ✅ RESET UI
-    setShowCreateModal(false);
-    setNewGroupName("");
-    setSelectedMembers([]);
+    const payload = {
+      groupName: newGroupName.trim(),
+      creator: currentUser,
+      members: selectedMembers,
+    };
 
-    await loadData();
+    try {
+      const res = await fetch(`${API_BASE}/groups`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
-    alert("✅ Group created");
-  } catch (err) {
-    console.error("🔥 CREATE GROUP FAILED:", err);
-    alert("Create group failed — see console");
+      const raw = await res.json();
+      const parsed =
+        typeof raw?.body === "string" ? JSON.parse(raw.body) : raw;
+
+      if (!parsed.success) {
+        alert(parsed.message || "Failed to create group");
+        return;
+      }
+
+      // RESET UI
+      setShowCreateModal(false);
+      setNewGroupName("");
+      setSelectedMembers([]);
+
+      await loadData();
+
+      alert("✅ Group created");
+    } catch (err) {
+      console.error("🔥 CREATE GROUP FAILED:", err);
+      alert("Create group failed — see console");
+    }
   }
-}
-
-
 
   /* =========================================================
      GROUP MANAGEMENT
   ========================================================= */
 
   async function handleAddMember(userid) {
-  try {
-    const res = await fetch(`${API_BASE}/groups/add`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        groupid: selectedGroup.groupid,
-        username: userid,
-        actor: currentUser, // ✅ REQUIRED
-      }),
-    });
+    try {
+      const res = await fetch(`${API_BASE}/groups/add`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupid: selectedGroup.groupid,
+          username: userid,
+          actor: currentUser,
+        }),
+      });
 
-    const raw = await res.json();
-    const data = typeof raw.body === "string" ? JSON.parse(raw.body) : raw;
+      const raw = await res.json();
+      const data = typeof raw.body === "string" ? JSON.parse(raw.body) : raw;
 
-    if (!data.success) {
-      alert(data.message || "Unable to add member");
-      return;
+      if (!data.success) {
+        alert(data.message || "Unable to add member");
+        return;
+      }
+
+      const updated = data.members;
+
+      setSelectedGroup((prev) => ({ ...prev, members: updated }));
+      setGroups((prev) =>
+        prev.map((g) =>
+          g.groupid === selectedGroup.groupid ? { ...g, members: updated } : g
+        )
+      );
+    } catch (err) {
+      console.error("Add member failed:", err);
     }
-
-    const updated = data.members;
-
-    setSelectedGroup((prev) => ({ ...prev, members: updated }));
-    setGroups((prev) =>
-      prev.map((g) =>
-        g.groupid === selectedGroup.groupid ? { ...g, members: updated } : g
-      )
-    );
-  } catch (err) {
-    console.error("Add member failed:", err);
   }
-}
-
 
   async function handleRemoveMember(userid) {
-  try {
-    const res = await fetch(`${API_BASE}/groups/remove`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        groupid: selectedGroup.groupid,
-        username: userid,
-        actor: currentUser, // ✅ REQUIRED
-      }),
-    });
+    try {
+      const res = await fetch(`${API_BASE}/groups/remove`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupid: selectedGroup.groupid,
+          username: userid,
+          actor: currentUser,
+        }),
+      });
 
-    const raw = await res.json();
-    const data = typeof raw.body === "string" ? JSON.parse(raw.body) : raw;
+      const raw = await res.json();
+      const data = typeof raw.body === "string" ? JSON.parse(raw.body) : raw;
 
-    if (!data.success) {
-      alert(data.message || "Unable to remove member");
-      return;
+      if (!data.success) {
+        alert(data.message || "Unable to remove member");
+        return;
+      }
+
+      const updated = data.members;
+
+      setSelectedGroup((prev) => ({ ...prev, members: updated }));
+      setGroups((prev) =>
+        prev.map((g) =>
+          g.groupid === selectedGroup.groupid ? { ...g, members: updated } : g
+        )
+      );
+    } catch (err) {
+      console.error("Remove member failed:", err);
     }
-
-    const updated = data.members;
-
-    setSelectedGroup((prev) => ({ ...prev, members: updated }));
-    setGroups((prev) =>
-      prev.map((g) =>
-        g.groupid === selectedGroup.groupid ? { ...g, members: updated } : g
-      )
-    );
-  } catch (err) {
-    console.error("Remove member failed:", err);
   }
-}
-
 
   async function handleRenameGroup() {
     if (!manageGroupName.trim()) return;
@@ -318,254 +307,264 @@ async function loadUnread() {
         />
       </div>
 
+      {/* CREATE GROUP MODAL */}
       {showCreateModal && (
-  <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
-    <div className="bg-white w-[420px] rounded-lg shadow-lg p-5">
-      <h3 className="text-lg font-semibold mb-4">
-        Create Group
-      </h3>
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+          <div className="bg-white w-[420px] rounded-lg shadow-lg p-5">
+            <h3 className="text-lg font-semibold mb-4">Create Group</h3>
 
-      {/* GROUP NAME */}
-      <input
-        type="text"
-        placeholder="Group name"
-        value={newGroupName}
-        onChange={(e) => setNewGroupName(e.target.value)}
-        className="w-full border rounded px-3 py-2 mb-4"
-      />
-
-      {/* MEMBER SELECTION */}
-      <div className="mb-4 max-h-48 overflow-y-auto border rounded p-2">
-        <p className="text-xs text-slate-500 mb-2">
-          Add members
-        </p>
-
-        {members.map((m) => (
-          <label
-            key={m.userid}
-            className="flex items-center gap-2 text-sm py-1 cursor-pointer"
-          >
+            {/* GROUP NAME */}
             <input
-              type="checkbox"
-              checked={selectedMembers.includes(m.userid)}
-              onChange={(e) => {
-                setSelectedMembers((prev) =>
-                  e.target.checked
-                    ? [...prev, m.userid]
-                    : prev.filter((id) => id !== m.userid)
-                );
-              }}
+              type="text"
+              placeholder="Group name"
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              className="w-full border rounded px-3 py-2 mb-4"
             />
-            {m.profileName}
-          </label>
-        ))}
-      </div>
 
-      {/* ACTIONS */}
-      <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            ////console.log("❌ Create group cancelled");
-            setShowCreateModal(false);
-            setNewGroupName("");
-            setSelectedMembers([]);
-          }}
-          className="px-4 py-2 border rounded"
-        >
-          Cancel
-        </button>
+            {/* MEMBER SELECTION */}
+            <div className="mb-4 max-h-48 overflow-y-auto border rounded p-2">
+              <p className="text-xs text-slate-500 mb-2">Add members</p>
 
-        <button
-          type="button"
-          onClick={handleCreateGroup}
-          className="px-4 py-2 bg-blue-600 text-white rounded"
-        >
-          Create
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+              {members.map((m) => (
+                <label
+                  key={m.userid}
+                  className="flex items-center gap-2 text-sm py-1 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedMembers.includes(m.userid)}
+                    onChange={(e) => {
+                      setSelectedMembers((prev) =>
+                        e.target.checked
+                          ? [...prev, m.userid]
+                          : prev.filter((id) => id !== m.userid)
+                      );
+                    }}
+                  />
+                  {m.profileName}
+                </label>
+              ))}
+            </div>
 
+            {/* ACTIONS */}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setNewGroupName("");
+                  setSelectedMembers([]);
+                }}
+                className="px-4 py-2 border rounded"
+              >
+                Cancel
+              </button>
 
-{/* ========================= GROUPS ========================= */}
-<div className="p-3 border-b overflow-y-auto">
-  <div className="flex justify-between items-center mb-2">
-    <h2 className="font-semibold text-slate-600 text-sm flex items-center gap-2">
-      <Users size={14} /> Groups
-    </h2>
+              <button
+                type="button"
+                onClick={handleCreateGroup}
+                className="px-4 py-2 bg-blue-600 text-white rounded"
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-    <button
-      onClick={() => setShowCreateModal(true)}
-      className="bg-blue-500 text-white text-xs px-2 py-1 rounded"
-    >
-      <Plus size={12} />
-    </button>
-  </div>
+      {/* ========================= GROUPS ========================= */}
+      <div className="p-3 border-b overflow-y-auto">
+        <div className="flex justify-between items-center mb-2">
+          <h2 className="font-semibold text-slate-600 text-sm flex items-center gap-2">
+            <Users size={14} /> Groups
+          </h2>
 
-  {groups.length === 0 && (
-    <div className="text-xs text-slate-400 px-3 py-2">
-      No groups yet
-    </div>
-  )}
-
-  {groups.map((g) => {
-    const chatKey = `group-${g.groupid}`;
-    const isActive = activeChat === chatKey;
-
-    return (
-      <div
-        key={g.groupid}
-        className={`flex items-center justify-between px-3 py-2 rounded
-          ${isActive ? "bg-blue-50" : "hover:bg-gray-50"}`}
-      >
-        {/* GROUP CLICK */}
-        <div
-          onClick={() => {
-            setActiveChat(chatKey);
-            onSelectUser({
-              type: "group",
-              id: g.groupid,
-              name: g.groupname,
-            });
-          }}
-          className="flex-1 text-sm cursor-pointer truncate"
-        >
-          {g.groupname}
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="bg-blue-500 text-white text-xs px-2 py-1 rounded"
+          >
+            <Plus size={12} />
+          </button>
         </div>
 
-        {/* EDIT */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setSelectedGroup(g);
-            setManageGroupName(g.groupname);
-            setShowManageModal(true);
-          }}
-          className="ml-2 text-gray-500 hover:text-blue-600"
-        >
-          <Edit3 size={14} />
-        </button>
-      </div>
-    );
-  })}
-</div>
+        {groups.length === 0 && (
+          <div className="text-xs text-slate-400 px-3 py-2">
+            No groups yet
+          </div>
+        )}
 
-{/*=============MANAGE GROUPS==============================*/}
-{showManageModal && selectedGroup && (
-  <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
-    <div className="bg-white w-[420px] rounded-lg p-5">
-      <h3 className="font-semibold mb-4">Manage Group</h3>
-
-      {/* Rename */}
-      <input
-        value={manageGroupName}
-        onChange={(e) => setManageGroupName(e.target.value)}
-        className="w-full border px-3 py-2 mb-3 rounded"
-      />
-
-      <button
-        onClick={handleRenameGroup}
-        className="w-full bg-blue-600 text-white py-2 rounded mb-4"
-      >
-        Rename Group
-      </button>
-
-      {/* Members */}
-      <div className="border rounded p-2 max-h-48 overflow-y-auto">
-        {members.map((m) => {
-          const inGroup = selectedGroup.members.includes(m.userid);
+        {groups.map((g) => {
+          const chatId = `GROUP#${g.groupid}`;
+          const isActive = activeChat === chatId;
 
           return (
             <div
-              key={m.userid}
-              className="flex justify-between items-center py-1"
+              key={g.groupid}
+              className={`flex items-center justify-between px-3 py-2 rounded ${
+                isActive ? "bg-blue-50" : "hover:bg-gray-50"
+              }`}
             >
-              <span>{m.profileName}</span>
+              {/* GROUP CLICK */}
+              <div
+                onClick={() => {
+                  setActiveChat(chatId);
+                  setUnread((prev) => ({ ...prev, [chatId]: 0 }));
+                  onSelectUser({
+                    type: "group",
+                    id: g.groupid,
+                    name: g.groupname,
+                  });
+                }}
+                className="flex-1 text-sm cursor-pointer truncate flex items-center gap-2"
+              >
+                <span>{g.groupname}</span>
 
-              {inGroup ? (
-                <button
-                  disabled={m.userid === selectedGroup.creator}
-                  onClick={() => handleRemoveMember(m.userid)}
-                  className="text-red-600 text-xs"
-                >
-                  Remove
-                </button>
-              ) : (
-                <button
-                  onClick={() => handleAddMember(m.userid)}
-                  className="text-blue-600 text-xs"
-                >
-                  Add
-                </button>
-              )}
+                {unread[chatId] > 0 && (
+                  <span className="ml-2 bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">
+                    {unread[chatId]}
+                  </span>
+                )}
+              </div>
+
+              {/* EDIT */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedGroup(g);
+                  setManageGroupName(g.groupname);
+                  setShowManageModal(true);
+                }}
+                className="ml-2 text-gray-500 hover:text-blue-600"
+              >
+                <Edit3 size={14} />
+              </button>
             </div>
           );
         })}
       </div>
 
-      {/* Delete */}
-      <button
-        onClick={() => {
-          if (confirm("Delete this group?")) handleDeleteGroup();
-        }}
-        className="mt-4 w-full bg-red-600 text-white py-2 rounded"
-      >
-        Delete Group
-      </button>
+      {/*=============MANAGE GROUPS==============================*/}
+      {showManageModal && selectedGroup && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+          <div className="bg-white w-[420px] rounded-lg p-5">
+            <h3 className="font-semibold mb-4">Manage Group</h3>
 
-      <button
-        onClick={() => setShowManageModal(false)}
-        className="mt-2 w-full border py-2 rounded"
-      >
-        Close
-      </button>
-    </div>
-  </div>
-)}
+            {/* Rename */}
+            <input
+              value={manageGroupName}
+              onChange={(e) => setManageGroupName(e.target.value)}
+              className="w-full border px-3 py-2 mb-3 rounded"
+            />
 
+            <button
+              onClick={handleRenameGroup}
+              className="w-full bg-blue-600 text-white py-2 rounded mb-4"
+            >
+              Rename Group
+            </button>
 
+            {/* Members */}
+            <div className="border rounded p-2 max-h-48 overflow-y-auto">
+              {members.map((m) => {
+                const inGroup =
+                  selectedGroup.members &&
+                  selectedGroup.members.includes(m.userid);
+
+                return (
+                  <div
+                    key={m.userid}
+                    className="flex justify-between items-center py-1"
+                  >
+                    <span>{m.profileName}</span>
+
+                    {inGroup ? (
+                      <button
+                        disabled={m.userid === selectedGroup.creator}
+                        onClick={() => handleRemoveMember(m.userid)}
+                        className="text-red-600 text-xs"
+                      >
+                        Remove
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleAddMember(m.userid)}
+                        className="text-blue-600 text-xs"
+                      >
+                        Add
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Delete */}
+            <button
+              onClick={() => {
+                if (confirm("Delete this group?")) handleDeleteGroup();
+              }}
+              className="mt-4 w-full bg-red-600 text-white py-2 rounded"
+            >
+              Delete Group
+            </button>
+
+            <button
+              onClick={() => setShowManageModal(false)}
+              className="mt-2 w-full border py-2 rounded"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ========================= MEMBERS ========================= */}
       <div className="p-3 border-b flex-1 overflow-y-auto">
-        <h2 className="font-semibold text-slate-600 text-sm mb-2">👤 Members</h2>
+        <h2 className="font-semibold text-slate-600 text-sm mb-2">
+          👤 Members
+        </h2>
 
         {members
           .filter((m) =>
-            (m.profileName || "").toLowerCase().includes(search.toLowerCase())
+            (m.profileName || "")
+              .toLowerCase()
+              .includes(search.toLowerCase())
           )
-          .map((m) => (
-            <button
-              key={m.userid}
-              onClick={() => {
-                setActiveChat(`user-${m.userid}`);
-                onSelectUser({
-                  type: "user",
-                  id: m.userid,
-                  name: m.profileName,
-                });
-              }}
-              className="flex justify-between items-center w-full px-3 py-2 text-sm hover:bg-gray-50"
-            >
-              <div className="flex items-center gap-3">
-                <Avatar name={m.profileName} size={2.2} />
-                <span>{m.profileName}</span>
-              </div>
+          .map((m) => {
+            const chatId = `CHAT#${[currentUser, m.userid]
+              .map((s) => s.toLowerCase())
+              .sort()
+              .join("#")}`;
 
-              {unread[`user-${m.userid}`] > 0 && (
-                <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
-                  {unread[`user-${m.userid}`]}
-                </span>
-              )}
-            </button>
-          ))}
+            return (
+              <button
+                key={m.userid}
+                onClick={() => {
+                  setActiveChat(chatId);
+                  setUnread((prev) => ({ ...prev, [chatId]: 0 }));
+                  onSelectUser({
+                    type: "user",
+                    id: m.userid,
+                    name: m.profileName,
+                  });
+                }}
+                className="flex justify-between items-center w-full px-3 py-2 text-sm hover:bg-gray-50"
+              >
+                <div className="flex items-center gap-3">
+                  <Avatar name={m.profileName} size={2.2} />
+                  <span>{m.profileName}</span>
+                </div>
+
+                {unread[chatId] > 0 && (
+                  <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
+                    {unread[chatId]}
+                  </span>
+                )}
+              </button>
+            );
+          })}
       </div>
-
-      {/* =========================================================
-         GROUP MODALS OMITTED FOR BREVITY
-         (already working in your version)
-      ========================================================= */}
     </aside>
   );
 }
