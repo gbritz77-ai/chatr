@@ -101,6 +101,7 @@ exports.handler = async (event) => {
 
     /* ===========================================================
        💾 Save user to DynamoDB
+       more info
     ============================================================ */
     const newUser = {
       userid: email,

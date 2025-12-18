@@ -12,7 +12,6 @@ provider:
 
   environment:
     JWT_SECRET: S3!
-    VITE_API_BASE: https://qcgqjznbfg.execute-api.eu-west-2.amazonaws.com/dev
 
     MEMBERS_TABLE: chatr-members
     MESSAGES_TABLE: chatr-messages
@@ -31,13 +30,35 @@ package:
     - "src/**"
     - "package.json"
 
+custom:
+  corsConfig:
+    origin: "*"
+    headers:
+      - Content-Type
+      - Authorization
+      - X-Amz-Date
+      - X-Api-Key
+      - X-Amz-Security-Token
+      - X-Amz-User-Agent
+    allowCredentials: false
+
 functions:
   auth:
     handler: src/handlers/auth.handler
     events:
       - http:
           path: auth
-          method: POST
+          method: post
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+              - Authorization
+            allowCredentials: false
+
+      - http:
+          path: auth
+          method: options
           cors: true
 
   register:
@@ -45,53 +66,53 @@ functions:
     events:
       - http:
           path: auth/register
-          method: POST
-          cors: true
+          method: post
+          cors: ${self:custom.corsConfig}
 
   members:
     handler: src/handlers/members.handler
     events:
       - http:
           path: members/{proxy+}
-          method: ANY
-          cors: true
+          method: any
+          cors: ${self:custom.corsConfig}
 
   messages:
     handler: src/handlers/messages.handler
     events:
       - http:
           path: messages/{proxy+}
-          method: ANY
-          cors: true
+          method: any
+          cors: ${self:custom.corsConfig}
 
   groups:
     handler: src/handlers/groups.handler
     events:
       - http:
           path: groups/{proxy+}
-          method: ANY
-          cors: true
+          method: any
+          cors: ${self:custom.corsConfig}
 
   presignUpload:
     handler: src/handlers/presignUpload.handler
     events:
       - http:
           path: presign-upload
-          method: POST
-          cors: true
+          method: post
+          cors: ${self:custom.corsConfig}
 
   presignDownload:
     handler: src/handlers/presignDownload.handler
     events:
       - http:
           path: presign-download
-          method: POST
-          cors: true
+          method: post
+          cors: ${self:custom.corsConfig}
 
   typing:
     handler: src/handlers/typing.handler
     events:
       - http:
           path: typing/{proxy+}
-          method: ANY
-          cors: true
+          method: any
+          cors: ${self:custom.corsConfig}
