@@ -20,7 +20,7 @@ if (!base) {
     console.log("✅ Using local Serverless Offline:", base);
   } else {
     // ✅ FIXED: Correct production fallback (your current API Gateway)
-    base = "https://qcgqjznbfg.execute-api.eu-west-2.amazonaws.com/dev";
+    base = "https://1u47jmgvaa.execute-api.eu-west-2.amazonaws.com/dev";
     console.log("🌍 Using production AWS API Gateway fallback:", base);
   }
 } else {
